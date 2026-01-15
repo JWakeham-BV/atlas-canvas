@@ -42,8 +42,8 @@ export function MapControl({ onLocationSelect, selectedLocationId }: MapControlP
     <div className="relative w-full h-full bg-[#050508] overflow-hidden">
       <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-[0.05]">
         <defs>
-          <pattern id="dotGrid" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
-            <circle cx="2" cy="2" r="1" fill="white" />
+          <pattern id="dotGrid" x="0" y="0" width="10" height="10" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.8" fill="white" />
           </pattern>
         </defs>
         <rect width="100%" height="100%" fill="url(#dotGrid)" />
@@ -75,12 +75,11 @@ export function MapControl({ onLocationSelect, selectedLocationId }: MapControlP
                     key={geo.rsmKey}
                     geography={geo}
                     fill="url(#dotGrid)"
-                    stroke="rgba(255,255,255,0.15)"
-                    strokeWidth={0.5}
+                    stroke="none"
                     style={{
-                      default: { outline: "none", opacity: 0.5 },
-                      hover: { fill: "rgba(255,255,255,0.1)", outline: "none", opacity: 0.8 },
-                      pressed: { outline: "none" },
+                      default: { outline: "none", opacity: 0.6 },
+                      hover: { outline: "none", opacity: 0.6 },
+                      pressed: { outline: "none", opacity: 0.6 },
                     }}
                   />
                 ))
