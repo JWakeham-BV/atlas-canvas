@@ -17,7 +17,12 @@ export function InfoDrawer({ locationId, onClose }: InfoDrawerProps) {
           initial={{ x: "100%", opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: "100%", opacity: 0 }}
-          transition={{ type: "spring", damping: 30, stiffness: 300 }}
+          transition={{ 
+            type: "spring", 
+            damping: 25, 
+            stiffness: 120,
+            mass: 0.8
+          }}
           className="fixed inset-y-0 right-0 z-50 w-full sm:w-[450px] bg-card/95 backdrop-blur-xl border-l border-white/5 shadow-2xl flex flex-col"
         >
           {/* Close Button */}

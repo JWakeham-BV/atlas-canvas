@@ -1,11 +1,10 @@
 import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup } from "react-simple-maps";
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useLocations } from "@/hooks/use-locations";
 import { Pin } from "./Pin";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Minus, Plus, Compass } from "lucide-react";
 
-// Use a simplified world topology
 const geoUrl = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
 
 interface MapControlProps {
@@ -17,7 +16,6 @@ export function MapControl({ onLocationSelect, selectedLocationId }: MapControlP
   const { data: locations = [] } = useLocations();
   const [position, setPosition] = useState({ coordinates: [0, 20] as [number, number], zoom: 1.2 });
 
-  // Handle zoom in/out manually
   const handleZoomIn = () => {
     if (position.zoom >= 4) return;
     setPosition(pos => ({ ...pos, zoom: pos.zoom * 1.5 }));
@@ -36,25 +34,25 @@ export function MapControl({ onLocationSelect, selectedLocationId }: MapControlP
     onLocationSelect(id);
     setPosition({
       coordinates,
-      zoom: 2.5, // Auto zoom to the pin
+      zoom: 3, 
     });
   };
 
   return (
     <div className="relative w-full h-full bg-[#050508] overflow-hidden">
-      {/* Aesthetic grid overlay */}
-      <div 
-        className="absolute inset-0 pointer-events-none opacity-[0.03]" 
-        style={{ 
-          backgroundImage: "radial-gradient(circle, #ffffff 1px, transparent 1px)", 
-          backgroundSize: "40px 40px" 
-        }} 
-      />
+      <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-[0.05]">
+        <defs>
+          <pattern id="dotGrid" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+            <circle cx="2" cy="2" r="1" fill="white" />
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill="url(#dotGrid)" />
+      </svg>
 
       <motion.div 
         initial={{ opacity: 0 }} 
         animate={{ opacity: 1 }} 
-        transition={{ duration: 1 }}
+        transition={{ duration: 1.5, ease: "easeOut" }}
         className="w-full h-full"
       >
         <ComposableMap
@@ -68,7 +66,7 @@ export function MapControl({ onLocationSelect, selectedLocationId }: MapControlP
             onMoveEnd={handleMoveEnd}
             maxZoom={5}
             minZoom={1}
-            translateExtent={[[0, 0], [800, 600]]} // Keep map roughly in view
+            translateExtent={[[0, 0], [800, 600]]} 
           >
             <Geographies geography={geoUrl}>
               {({ geographies }) =>
@@ -76,13 +74,13 @@ export function MapControl({ onLocationSelect, selectedLocationId }: MapControlP
                   <Geography
                     key={geo.rsmKey}
                     geography={geo}
-                    fill="#15151a"
-                    stroke="#2a2a30"
+                    fill="url(#dotGrid)"
+                    stroke="rgba(255,255,255,0.15)"
                     strokeWidth={0.5}
                     style={{
-                      default: { outline: "none", transition: "all 250ms" },
-                      hover: { fill: "#1f1f25", outline: "none", stroke: "#3f3f4a" },
-                      pressed: { fill: "#1f1f25", outline: "none" },
+                      default: { outline: "none", opacity: 0.5 },
+                      hover: { fill: "rgba(255,255,255,0.1)", outline: "none", opacity: 0.8 },
+                      pressed: { outline: "none" },
                     }}
                   />
                 ))
@@ -105,7 +103,6 @@ export function MapControl({ onLocationSelect, selectedLocationId }: MapControlP
         </ComposableMap>
       </motion.div>
 
-      {/* Custom Map Controls */}
       <div className="absolute bottom-8 right-8 flex flex-col gap-4">
         <div className="bg-card/80 backdrop-blur-md border border-white/5 rounded-full p-2 flex flex-col gap-2 shadow-2xl shadow-black/50">
           <button 
@@ -124,12 +121,10 @@ export function MapControl({ onLocationSelect, selectedLocationId }: MapControlP
         </div>
       </div>
 
-      {/* Decorative Compass */}
       <div className="absolute top-8 right-8 text-white/10 pointer-events-none">
         <Compass size={64} strokeWidth={1} />
       </div>
       
-      {/* Title Watermark */}
       <div className="absolute bottom-8 left-8 pointer-events-none">
         <h1 className="text-4xl md:text-6xl font-display text-white/5 font-bold tracking-tighter">
           ATLAS
