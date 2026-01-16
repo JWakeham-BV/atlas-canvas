@@ -1,7 +1,7 @@
 import { useLocation } from "@/hooks/use-locations";
 import { motion } from "@/lib/motion";
 import gsap from "gsap";
-import { MapPin, Radar, X } from "lucide-react";
+import { MapPin, Radar as RadarIcon, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 interface InfoDrawerProps {
@@ -148,8 +148,8 @@ export function InfoDrawer({ locationId, onClose }: InfoDrawerProps) {
       <div className="relative z-10 h-full flex flex-col gap-6 p-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-xs uppercase tracking-[0.3em] text-white/40">
-            <Radar size={14} />
-            Field Brief
+            <RadarIcon size={14} />
+            Operation Details
           </div>
           <button
             onClick={onClose}
@@ -166,7 +166,7 @@ export function InfoDrawer({ locationId, onClose }: InfoDrawerProps) {
           </div>
         ) : (
           <div ref={contentRef} className="flex flex-col gap-6">
-            <div className="flex items-center justify-between">
+            <div className="flex gap-2 items-center justify-between">
               <div>
                 <p className="text-[10px] uppercase tracking-[0.3em] text-primary/70 mb-2">
                   {location.category}
@@ -175,16 +175,7 @@ export function InfoDrawer({ locationId, onClose }: InfoDrawerProps) {
                   {location.name}
                 </h2>
               </div>
-
-              <div className="relative w-20 h-20">
-                <div className="absolute inset-0 rounded-full border border-white/10" />
-                <div className="absolute inset-3 rounded-full border border-white/10" />
-                <div className="absolute inset-[18px] rounded-full border border-white/10" />
-                <div ref={radarRef} className="absolute inset-0 origin-center">
-                  <div className="absolute left-1/2 top-1/2 h-1/2 w-px -translate-x-1/2 bg-primary/70 shadow-[0_0_12px_rgba(91,255,190,0.7)]" />
-                </div>
-                <div className="absolute left-1/2 top-1/2 w-2 h-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary shadow-[0_0_12px_rgba(91,255,190,0.8)]" />
-              </div>
+              <Radar radarRef={radarRef} />
             </div>
 
             <div className="relative h-40 overflow-hidden rounded-2xl border border-white/10">
@@ -232,6 +223,20 @@ export function InfoDrawer({ locationId, onClose }: InfoDrawerProps) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function Radar({ radarRef }: { radarRef: React.RefObject<HTMLDivElement> }) {
+  return (
+    <div className="relative size-20 min-w-20 min-h-20">
+      <div className="absolute inset-0 rounded-full border border-white/10" />
+      <div className="absolute inset-3 rounded-full border border-white/10" />
+      <div className="absolute inset-[18px] rounded-full border border-white/10" />
+      <div ref={radarRef} className="absolute inset-0 origin-center">
+        <div className="absolute left-1/2 top-1/2 h-1/2 w-px -translate-x-1/2 bg-primary/70 shadow-[0_0_12px_rgba(91,255,190,0.7)]" />
+      </div>
+      <div className="absolute left-1/2 top-1/2 w-2 h-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary shadow-[0_0_12px_rgba(91,255,190,0.8)]" />
     </div>
   );
 }
