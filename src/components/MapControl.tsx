@@ -2,17 +2,23 @@ import { useLocations } from "@/hooks/use-locations";
 import { motion } from "@/lib/motion";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
-import { ChevronDown, ChevronUp, Compass, Minus, Plus } from "lucide-react";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ComposableMap,
   Geographies,
   Geography,
+  Graticule,
   Marker,
   ZoomableGroup,
 } from "react-simple-maps";
-import Supercluster from "supercluster";
 import { Pin } from "./Pin";
+import { RegionMenu } from "./map/RegionMenu";
+import { ZoomControls } from "./map/ZoomControls";
+import { getMercatorBounds } from "./map/geo";
+import { useClusters } from "./map/useClusters";
+import { useMapPosition } from "./map/useMapPosition";
+import { useMapSize } from "./map/useMapSize";
 
 gsap.registerPlugin(useGSAP);
 
@@ -24,6 +30,14 @@ interface MapControlProps {
   resetViewToken?: number;
 }
 
+type Region = {
+  id: string;
+  label: string;
+  coordinates: [number, number];
+  zoom: number;
+  bounds: [number, number, number, number];
+};
+
 export function MapControl({
   onLocationSelect,
   selectedLocationId,
@@ -34,116 +48,140 @@ export function MapControl({
     () => new Map(locations.map((loc) => [loc.id, loc])),
     [locations]
   );
-  const defaultPosition = useRef({ x: 0, y: 20, zoom: 1.2 });
-  const positionRef = useRef({ ...defaultPosition.current });
-  const [position, setPosition] = useState({
-    coordinates: [positionRef.current.x, positionRef.current.y] as [
-      number,
-      number
-    ],
-    zoom: positionRef.current.zoom,
-  });
+  const defaultPosition = useMemo(
+    () => ({
+      coordinates: [0, 20] as [number, number],
+      zoom: 1.2,
+    }),
+    []
+  );
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<HTMLDivElement>(null);
+  const mapSize = useMapSize(containerRef);
+  const mapWidth = mapSize.width || 800;
+  const mapHeight = mapSize.height || 450;
+  const {
+    position,
+    positionRef,
+    animatePosition,
+    updatePosition,
+    resetPosition,
+    isAnimating,
+  } = useMapPosition(defaultPosition);
 
-  const clusterIndex = useMemo(() => {
-    const index = new Supercluster<{
-      locationId: number;
-      category: string;
-    }>({
-      radius: 60,
-      maxZoom: 6,
-    });
-    index.load(
-      locations.map((loc) => ({
-        type: "Feature",
-        properties: {
-          locationId: loc.id,
-          category: loc.category,
-        },
-        geometry: {
-          type: "Point",
-          coordinates: [loc.longitude, loc.latitude],
-        },
-      }))
-    );
-    return index;
-  }, [locations]);
+  const bounds = useMemo(
+    () =>
+      getMercatorBounds({
+        width: mapWidth,
+        height: mapHeight,
+        center: position.coordinates,
+        scale: 140 * position.zoom,
+      }),
+    [mapHeight, mapWidth, position.coordinates, position.zoom]
+  );
 
-  const clusters = useMemo(() => {
-    const bounds: [number, number, number, number] = [-180, -85, 180, 85];
-    return clusterIndex.getClusters(bounds, Math.round(position.zoom));
-  }, [clusterIndex, position.zoom]);
+  const normalizedBounds = useMemo(() => {
+    const [minLng, minLat, maxLng, maxLat] = bounds;
+    const isValid =
+      Number.isFinite(minLng) &&
+      Number.isFinite(minLat) &&
+      Number.isFinite(maxLng) &&
+      Number.isFinite(maxLat) &&
+      minLng <= maxLng &&
+      minLat <= maxLat;
+    return isValid
+      ? bounds
+      : ([-180, -85, 180, 85] as [number, number, number, number]);
+  }, [bounds]);
+
+  const [stableBounds, setStableBounds] = useState(normalizedBounds);
+
+  useEffect(() => {
+    if (!isAnimating) {
+      setStableBounds(normalizedBounds);
+    }
+  }, [isAnimating, normalizedBounds]);
+
+  const boundsForClusters = isAnimating ? stableBounds : normalizedBounds;
+
+  const { clusterIndex, clusters } = useClusters(
+    locations,
+    position.zoom,
+    boundsForClusters
+  );
 
   const showRawPins = position.zoom >= 5.5;
   const [activeRegionId, setActiveRegionId] = useState<string>("world");
   const [isRegionsOpen, setIsRegionsOpen] = useState(true);
-  const isMobileRef = useRef(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [hoveredRegion, setHoveredRegion] = useState<string | null>(null);
+  const [pendingSelectionId, setPendingSelectionId] = useState<number | null>(
+    null
+  );
 
-  const regions = useMemo(
+  const regions = useMemo<Region[]>(
     () => [
       {
         id: "world",
         label: "World",
-        coordinates: [defaultPosition.current.x, defaultPosition.current.y] as [
-          number,
-          number
-        ],
-        zoom: defaultPosition.current.zoom,
+        coordinates: defaultPosition.coordinates,
+        zoom: defaultPosition.zoom,
         bounds: [-180, -85, 180, 85] as [number, number, number, number],
       },
       {
         id: "north-america",
         label: "N. America",
-        coordinates: [-100, 40],
+        coordinates: [-100, 40] as [number, number],
         zoom: 2.4,
-        bounds: [-170, 5, -50, 80],
+        bounds: [-170, 5, -50, 80] as [number, number, number, number],
       },
       {
         id: "south-america",
         label: "S. America",
-        coordinates: [-60, -15],
+        coordinates: [-60, -15] as [number, number],
         zoom: 2.5,
-        bounds: [-90, -60, -25, 15],
+        bounds: [-90, -60, -25, 15] as [number, number, number, number],
       },
       {
         id: "europe",
         label: "Europe",
-        coordinates: [10, 52],
+        coordinates: [10, 52] as [number, number],
         zoom: 2.7,
-        bounds: [-25, 35, 40, 72],
+        bounds: [-25, 35, 40, 72] as [number, number, number, number],
       },
       {
         id: "africa",
         label: "Africa",
-        coordinates: [20, 5],
+        coordinates: [20, 5] as [number, number],
         zoom: 2.4,
-        bounds: [-20, -35, 55, 35],
+        bounds: [-20, -35, 55, 35] as [number, number, number, number],
       },
       {
         id: "middle-east",
         label: "Middle East",
-        coordinates: [45, 25],
+        coordinates: [45, 25] as [number, number],
         zoom: 3,
-        bounds: [30, 10, 60, 40],
+        bounds: [30, 10, 60, 40] as [number, number, number, number],
       },
       {
         id: "asia",
         label: "Asia",
-        coordinates: [95, 35],
+        coordinates: [95, 35] as [number, number],
         zoom: 2.6,
-        bounds: [40, 5, 150, 75],
+        bounds: [40, 5, 150, 75] as [number, number, number, number],
       },
       {
         id: "oceania",
         label: "Oceania",
-        coordinates: [135, -25],
+        coordinates: [135, -25] as [number, number],
         zoom: 2.6,
-        bounds: [100, -50, 180, 0],
+        bounds: [100, -50, 180, 0] as [number, number, number, number],
       },
     ],
     [defaultPosition]
   );
+
+  const gridOpacity = Math.min(0.35, Math.max(0, (position.zoom - 1.2) / 3));
 
   useGSAP(
     () => {
@@ -160,42 +198,35 @@ export function MapControl({
 
   useEffect(() => {
     if (resetViewToken === undefined) return;
-    animatePosition({
-      coordinates: [defaultPosition.current.x, defaultPosition.current.y],
-      zoom: defaultPosition.current.zoom,
-    });
-  }, [resetViewToken]);
+    resetPosition();
+  }, [resetPosition, resetViewToken]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const mq = window.matchMedia("(max-width: 639px)");
     const update = () => {
-      isMobileRef.current = mq.matches;
+      setIsMobile(mq.matches);
     };
     update();
     mq.addEventListener("change", update);
     return () => mq.removeEventListener("change", update);
   }, []);
 
-  const animatePosition = (next: {
-    coordinates: [number, number];
-    zoom: number;
-  }) => {
-    gsap.killTweensOf(positionRef.current);
-    gsap.to(positionRef.current, {
-      x: next.coordinates[0],
-      y: next.coordinates[1],
-      zoom: next.zoom,
-      duration: motion.duration.zoom,
-      ease: motion.ease.inOut,
-      onUpdate: () => {
-        setPosition({
-          coordinates: [positionRef.current.x, positionRef.current.y],
-          zoom: positionRef.current.zoom,
-        });
-      },
-    });
-  };
+  const effectiveSelectedId = pendingSelectionId ?? selectedLocationId;
+
+  useEffect(() => {
+    if (
+      selectedLocationId !== null &&
+      selectedLocationId === pendingSelectionId
+    ) {
+      setPendingSelectionId(null);
+      return;
+    }
+
+    if (selectedLocationId === null && !isAnimating && pendingSelectionId) {
+      setPendingSelectionId(null);
+    }
+  }, [isAnimating, pendingSelectionId, selectedLocationId]);
 
   const handleZoomIn = () => {
     if (positionRef.current.zoom >= 6) return;
@@ -228,23 +259,25 @@ export function MapControl({
     coordinates: [number, number];
     zoom: number;
   }) => {
-    gsap.killTweensOf(positionRef.current);
-    positionRef.current = {
-      x: position.coordinates[0],
-      y: position.coordinates[1],
-      zoom: position.zoom,
-    };
-    setPosition(position);
+    updatePosition(position);
     setActiveRegionId(resolveRegionId(position.coordinates, position.zoom));
   };
 
   const handleMarkerClick = (id: number, coordinates: [number, number]) => {
-    onLocationSelect(id);
+    setPendingSelectionId(id);
     const nextZoom = Math.min(6, Math.max(positionRef.current.zoom, 3));
-    animatePosition({
-      coordinates,
-      zoom: nextZoom,
-    });
+    animatePosition(
+      {
+        coordinates,
+        zoom: nextZoom,
+      },
+      {
+        onComplete: () => {
+          onLocationSelect(id);
+          setPendingSelectionId(null);
+        },
+      }
+    );
   };
 
   const handleClusterClick = (
@@ -271,70 +304,24 @@ export function MapControl({
       coordinates: region.coordinates,
       zoom: Math.min(6, region.zoom),
     });
-    if (isMobileRef.current) {
+    if (isMobile) {
       setIsRegionsOpen(false);
     }
   };
 
   const regionMenu = (
-    <div className="bg-card/80 backdrop-blur-md border border-white/10 rounded-2xl p-3 shadow-2xl shadow-black/40 w-full sm:w-auto">
-      <div className="flex flex-col-reverse sm:flex-col">
-        <button
-          onClick={() => setIsRegionsOpen((open) => !open)}
-          className="w-full flex items-center justify-between text-[10px] uppercase tracking-[0.3em] text-white/40 px-2 pt-2 sm:pb-2"
-          aria-expanded={isRegionsOpen}
-          aria-label="Toggle regions menu"
-        >
-          Regions
-          {isRegionsOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-        </button>
-        <div
-          className={`flex flex-col gap-2 overflow-hidden transition-all duration-300 ${
-            isRegionsOpen ? "max-h-[420px] opacity-100" : "max-h-0 opacity-0"
-          }`}
-        >
-          {regions.map((region) => (
-            <button
-              key={region.id}
-              onClick={() =>
-                handleRegionSelect({
-                  id: region.id,
-                  coordinates: region.coordinates,
-                  zoom: region.zoom,
-                })
-              }
-              className={`px-3 py-2 rounded-xl text-xs uppercase tracking-[0.25em] transition-colors border ${
-                activeRegionId === region.id
-                  ? "bg-primary/15 border-primary/40 text-primary"
-                  : "bg-white/5 border-white/10 text-white/60 hover:text-white hover:bg-white/10"
-              }`}
-            >
-              {region.label}
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
+    <RegionMenu
+      regions={regions}
+      activeRegionId={activeRegionId}
+      isOpen={isRegionsOpen}
+      isMobile={isMobile}
+      onToggle={() => setIsRegionsOpen((open) => !open)}
+      onSelect={handleRegionSelect}
+    />
   );
 
   const zoomControls = (
-    <div className="bg-card/80 backdrop-blur-md border border-white/5 rounded-full p-2 flex flex-col gap-2 shadow-2xl shadow-black/50">
-      <button
-        onClick={handleZoomIn}
-        aria-label="Zoom in"
-        className="p-3 hover:bg-white/5 rounded-full text-foreground/80 hover:text-primary transition-colors"
-      >
-        <Plus size={20} />
-      </button>
-      <div className="h-px w-full bg-white/5" />
-      <button
-        onClick={handleZoomOut}
-        aria-label="Zoom out"
-        className="p-3 hover:bg-white/5 rounded-full text-foreground/80 hover:text-primary transition-colors"
-      >
-        <Minus size={20} />
-      </button>
-    </div>
+    <ZoomControls onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} />
   );
 
   return (
@@ -342,8 +329,15 @@ export function MapControl({
       ref={containerRef}
       className="relative w-full h-full bg-[#050508] overflow-hidden"
     >
+      <div className="absolute inset-0 map-ocean-glow pointer-events-none" />
+      <div className="absolute inset-0 map-atmosphere pointer-events-none" />
+      <div className="absolute inset-0 map-vignette pointer-events-none" />
+      <div className="absolute inset-0 map-noise pointer-events-none" />
+      <div className="absolute inset-0 map-scan pointer-events-none" />
       <div ref={mapRef} className="w-full h-full">
         <ComposableMap
+          width={mapWidth}
+          height={mapHeight}
           projection="geoMercator"
           projectionConfig={{ scale: 140 }}
           className="w-full h-full"
@@ -356,9 +350,15 @@ export function MapControl({
             minZoom={1}
             translateExtent={[
               [0, 0],
-              [800, 600],
+              [mapWidth, mapHeight],
             ]}
           >
+            <Graticule
+              stroke="rgba(255, 255, 255, 0.2)"
+              strokeWidth={0.5}
+              opacity={gridOpacity}
+            />
+
             <Geographies geography={geoUrl}>
               {({ geographies }) =>
                 geographies.map((geo) => (
@@ -368,15 +368,40 @@ export function MapControl({
                     fill="#0b0b10"
                     stroke="rgba(255, 255, 255, 0.18)"
                     strokeWidth={0.6}
+                    onMouseEnter={() => {
+                      const name =
+                        geo.properties?.NAME ||
+                        geo.properties?.name ||
+                        geo.properties?.ADMIN ||
+                        null;
+                      setHoveredRegion(name);
+                    }}
+                    onMouseLeave={() => setHoveredRegion(null)}
                     style={{
                       default: { outline: "none", opacity: 0.85 },
-                      hover: { outline: "none", opacity: 1 },
-                      pressed: { outline: "none", opacity: 1 },
+                      hover: {
+                        outline: "none",
+                        opacity: 1,
+                        fill: "#121723",
+                        stroke: "rgba(255, 255, 255, 0.35)",
+                      },
+                      pressed: {
+                        outline: "none",
+                        opacity: 1,
+                        fill: "#121723",
+                      },
                     }}
                   />
                 ))
               }
             </Geographies>
+            {hoveredRegion ? (
+              <div className="absolute top-6 left-6 z-30 hidden sm:block">
+                <div className="rounded-full bg-white/5 border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-white/60">
+                  {hoveredRegion}
+                </div>
+              </div>
+            ) : null}
 
             {showRawPins
               ? locations.map((loc) => (
@@ -387,7 +412,7 @@ export function MapControl({
                     <g transform={`scale(${1 / position.zoom})`}>
                       <Pin
                         category={loc.category}
-                        isSelected={selectedLocationId === loc.id}
+                        isSelected={effectiveSelectedId === loc.id}
                         onClick={() =>
                           handleMarkerClick(loc.id, [
                             loc.longitude,
@@ -410,20 +435,19 @@ export function MapControl({
                   if (isCluster) {
                     const count = cluster.properties.point_count as number;
                     const size = 18 + Math.min(16, Math.log(count) * 8);
+                    const clusterId = cluster.properties.cluster_id;
+                    if (clusterId === undefined) return null;
                     return (
                       <Marker
-                        key={`cluster-${cluster.properties.cluster_id}`}
+                        key={`cluster-${clusterId}`}
                         coordinates={[lng, lat]}
                       >
                         <g
                           transform={`scale(${1 / position.zoom})`}
                           onClick={() =>
-                            handleClusterClick(cluster.properties.cluster_id, [
-                              lng,
-                              lat,
-                            ])
+                            handleClusterClick(clusterId, [lng, lat])
                           }
-                          style={{ cursor: "pointer" }}
+                          className="cursor-pointer"
                         >
                           <circle
                             r={size}
@@ -463,7 +487,7 @@ export function MapControl({
                       <g transform={`scale(${1 / position.zoom})`}>
                         <Pin
                           category={loc.category}
-                          isSelected={selectedLocationId === loc.id}
+                          isSelected={effectiveSelectedId === loc.id}
                           onClick={() =>
                             handleMarkerClick(loc.id, [
                               loc.longitude,
@@ -483,23 +507,13 @@ export function MapControl({
         {regionMenu}
       </div>
 
-      <div className="absolute bottom-8 right-8 flex flex-col gap-4 hidden sm:flex">
+      <div className="absolute bottom-8 right-8 hidden sm:flex sm:flex-col sm:gap-4">
         {zoomControls}
       </div>
 
       <div className="absolute bottom-6 left-4 right-4 z-30 flex items-end justify-end gap-3 sm:hidden">
         <div className="w-full">{regionMenu}</div>
         {zoomControls}
-      </div>
-
-      <div className="absolute top-8 right-8 text-white/10 pointer-events-none">
-        <Compass size={64} strokeWidth={1} />
-      </div>
-
-      <div className="absolute bottom-8 left-8 pointer-events-none">
-        <h1 className="text-4xl md:text-6xl font-display text-white/5 font-bold tracking-tighter">
-          ATLAS
-        </h1>
       </div>
     </div>
   );

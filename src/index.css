@@ -66,3 +66,50 @@
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--primary) / 0.5); 
 }
+
+@layer utilities {
+  .pin-core {
+    transform-origin: center;
+    transform-box: fill-box;
+  }
+
+  .pin-ring {
+    transform-origin: center;
+    transform-box: fill-box;
+  }
+
+
+  .map-ocean-glow {
+    background: radial-gradient(circle at 50% 45%, rgba(20, 60, 80, 0.25), rgba(5, 5, 8, 0));
+  }
+
+  .map-atmosphere {
+    background: radial-gradient(circle at 50% 50%, rgba(90, 160, 200, 0.08), rgba(5, 5, 8, 0.65));
+  }
+
+  .map-vignette {
+    background: radial-gradient(circle at 50% 50%, rgba(5, 5, 8, 0), rgba(5, 5, 8, 0.75));
+  }
+
+  .map-noise {
+    background-image: url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNzIiIGhlaWdodD0iNzIiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGZpbHRlciBpZD0ibm9pc2UiPjxmZVR1cmJ1bGVuY2UgdHlwZT0iZnJhY3RhbE5vaXNlIiBiYXNlRnJlcXVlbmN5PSIwLjgiIG51bU9jdGF2ZXM9IjQiIHN0aXRjaFRpbGVzPSJzdGl0Y2giLz48L2ZpbHRlcj48cmVjdCB3aWR0aD0iNzIiIGhlaWdodD0iNzIiIGZpbGw9IiNmZmYiIGZpbHRlcj0idXJsKCNub2lzZSkiIG9wYWNpdHk9IjAuMDUiLz48L3N2Zz4=");
+    opacity: 0.2;
+    mix-blend-mode: soft-light;
+  }
+
+  .map-scan {
+    background: linear-gradient(120deg, transparent 0%, rgba(91, 255, 190, 0.06) 50%, transparent 100%);
+    mix-blend-mode: screen;
+    opacity: 0.6;
+    animation: map-scan 14s linear infinite;
+  }
+
+  @keyframes map-scan {
+    from {
+      transform: translateX(-60%);
+    }
+    to {
+      transform: translateX(60%);
+    }
+  }
+}
