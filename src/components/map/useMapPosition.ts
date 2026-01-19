@@ -11,12 +11,7 @@ export function useMapPosition(defaultPosition: {
     y: defaultPosition.coordinates[1],
     zoom: defaultPosition.zoom,
   });
-  const lastUpdateRef = useRef(0);
-  const lastValueRef = useRef({
-    x: positionRef.current.x,
-    y: positionRef.current.y,
-    zoom: positionRef.current.zoom,
-  });
+  const rafIdRef = useRef<number | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
   const [position, setPosition] = useState({
     coordinates: [positionRef.current.x, positionRef.current.y] as [
@@ -37,42 +32,48 @@ export function useMapPosition(defaultPosition: {
       }
     ) => {
     gsap.killTweensOf(positionRef.current);
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = null;
+    }
     setIsAnimating(true);
+    
+    const updatePositionOnFrame = () => {
+      setPosition({
+        coordinates: [positionRef.current.x, positionRef.current.y],
+        zoom: positionRef.current.zoom,
+      });
+      rafIdRef.current = requestAnimationFrame(updatePositionOnFrame);
+    };
+    
+    rafIdRef.current = requestAnimationFrame(updatePositionOnFrame);
+    
     gsap.to(positionRef.current, {
       x: next.coordinates[0],
       y: next.coordinates[1],
       zoom: next.zoom,
       duration: motion.duration.zoom * 0.75,
       ease: motion.ease.inOut,
-      onUpdate: () => {
-        const now = performance.now();
-        if (now - lastUpdateRef.current < 33) return;
-
-        const next = {
-          x: positionRef.current.x,
-          y: positionRef.current.y,
-          zoom: positionRef.current.zoom,
-        };
-
-        const dx = Math.abs(next.x - lastValueRef.current.x);
-        const dy = Math.abs(next.y - lastValueRef.current.y);
-        const dz = Math.abs(next.zoom - lastValueRef.current.zoom);
-
-        if (dx < 0.02 && dy < 0.02 && dz < 0.005) return;
-
-        lastUpdateRef.current = now;
-        lastValueRef.current = next;
-
-        setPosition({
-          coordinates: [next.x, next.y],
-          zoom: next.zoom,
-        });
-      },
       onComplete: () => {
+        if (rafIdRef.current !== null) {
+          cancelAnimationFrame(rafIdRef.current);
+          rafIdRef.current = null;
+        }
+        // Final position sync
+        setPosition({
+          coordinates: [positionRef.current.x, positionRef.current.y],
+          zoom: positionRef.current.zoom,
+        });
         setIsAnimating(false);
         options?.onComplete?.();
       },
-      onInterrupt: () => setIsAnimating(false),
+      onInterrupt: () => {
+        if (rafIdRef.current !== null) {
+          cancelAnimationFrame(rafIdRef.current);
+          rafIdRef.current = null;
+        }
+        setIsAnimating(false);
+      },
     });
   },
   []
@@ -83,13 +84,11 @@ export function useMapPosition(defaultPosition: {
     zoom: number;
   }) => {
     gsap.killTweensOf(positionRef.current);
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = null;
+    }
     positionRef.current = {
-      x: next.coordinates[0],
-      y: next.coordinates[1],
-      zoom: next.zoom,
-    };
-    lastUpdateRef.current = performance.now();
-    lastValueRef.current = {
       x: next.coordinates[0],
       y: next.coordinates[1],
       zoom: next.zoom,

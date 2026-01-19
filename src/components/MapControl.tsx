@@ -22,7 +22,7 @@ import { useMapSize } from "./map/useMapSize";
 
 gsap.registerPlugin(useGSAP);
 
-const geoUrl = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json";
+const geoUrl = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json";
 
 interface MapControlProps {
   onLocationSelect: (locationId: number | null) => void;
@@ -69,15 +69,19 @@ export function MapControl({
     isAnimating,
   } = useMapPosition(defaultPosition);
 
+  // Live position tracks the current view during user interaction (for clustering/sizing)
+  // This is separate from `position` which is the controlled state for ZoomableGroup
+  const [livePosition, setLivePosition] = useState(position);
+
   const bounds = useMemo(
     () =>
       getMercatorBounds({
         width: mapWidth,
         height: mapHeight,
-        center: position.coordinates,
-        scale: 140 * position.zoom,
+        center: livePosition.coordinates,
+        scale: 140 * livePosition.zoom,
       }),
-    [mapHeight, mapWidth, position.coordinates, position.zoom]
+    [mapHeight, mapWidth, livePosition.coordinates, livePosition.zoom]
   );
 
   const normalizedBounds = useMemo(() => {
@@ -94,23 +98,18 @@ export function MapControl({
       : ([-180, -85, 180, 85] as [number, number, number, number]);
   }, [bounds]);
 
-  const [stableBounds, setStableBounds] = useState(normalizedBounds);
-
-  useEffect(() => {
-    if (!isAnimating) {
-      setStableBounds(normalizedBounds);
-    }
-  }, [isAnimating, normalizedBounds]);
-
-  const boundsForClusters = isAnimating ? stableBounds : normalizedBounds;
-
   const { clusterIndex, clusters } = useClusters(
     locations,
-    position.zoom,
-    boundsForClusters
+    livePosition.zoom,
+    normalizedBounds
   );
 
-  const showRawPins = position.zoom >= 5.5;
+  const showRawPins = livePosition.zoom >= 5.5;
+
+  // Sync livePosition when position changes (from programmatic animations)
+  useEffect(() => {
+    setLivePosition(position);
+  }, [position]);
   const [activeRegionId, setActiveRegionId] = useState<string>("world");
   const [isRegionsOpen, setIsRegionsOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
@@ -181,7 +180,7 @@ export function MapControl({
     [defaultPosition]
   );
 
-  const gridOpacity = Math.min(0.35, Math.max(0, (position.zoom - 1.2) / 3));
+  const gridOpacity = Math.min(0.35, Math.max(0, (livePosition.zoom - 1.2) / 3));
 
   useGSAP(
     () => {
@@ -253,6 +252,18 @@ export function MapControl({
       return lng >= minLng && lng <= maxLng && lat >= minLat && lat <= maxLat;
     });
     return match ? match.id : "world";
+  };
+
+  const handleMove = (movePosition: {
+    x: number;
+    y: number;
+    zoom: number;
+  }) => {
+    // Update livePosition for clustering/sizing without affecting ZoomableGroup controlled state
+    setLivePosition({
+      coordinates: [movePosition.x, movePosition.y],
+      zoom: movePosition.zoom,
+    });
   };
 
   const handleMoveEnd = (position: {
@@ -327,13 +338,13 @@ export function MapControl({
   return (
     <div
       ref={containerRef}
-      className="relative w-full h-full bg-[#050508] overflow-hidden"
+      className="relative w-full h-full bg-[#0a121e] overflow-hidden"
     >
       <div className="absolute inset-0 map-ocean-glow pointer-events-none" />
       <div className="absolute inset-0 map-atmosphere pointer-events-none" />
       <div className="absolute inset-0 map-vignette pointer-events-none" />
       <div className="absolute inset-0 map-noise pointer-events-none" />
-      {/* <div className="absolute inset-0 map-scan pointer-events-none" /> */}
+
       <div ref={mapRef} className="w-full h-full">
         <ComposableMap
           width={mapWidth}
@@ -345,8 +356,9 @@ export function MapControl({
           <ZoomableGroup
             zoom={position.zoom}
             center={position.coordinates}
+            onMove={handleMove}
             onMoveEnd={handleMoveEnd}
-            maxZoom={6}
+            maxZoom={10}
             minZoom={1}
             translateExtent={[
               [0, 0],
@@ -354,20 +366,23 @@ export function MapControl({
             ]}
           >
             <Graticule
-              stroke="rgba(255, 255, 255, 0.2)"
+              stroke="rgba(91, 127, 163, 0.35)"
               strokeWidth={0.5}
               opacity={gridOpacity}
+              className="transition-opacity duration-1000"
             />
 
             <Geographies geography={geoUrl}>
               {({ geographies }) =>
                 geographies.map((geo) => (
                   <Geography
+                   vectorEffect="non-scaling-stroke"
                     key={geo.rsmKey}
                     geography={geo}
-                    fill="#0b0b10"
-                    stroke="rgba(255, 255, 255, 0.18)"
-                    strokeWidth={0.6}
+                    fill="#141e2d"
+                    stroke="rgba(91, 127, 163, 0.5)"
+                    strokeWidth={0.8}
+                    tabIndex={-1}
                     onMouseEnter={() => {
                       const name =
                         geo.properties?.NAME ||
@@ -378,17 +393,12 @@ export function MapControl({
                     }}
                     onMouseLeave={() => setHoveredRegion(null)}
                     style={{
-                      default: { outline: "none", opacity: 0.85 },
+                      default: { outline: "none", opacity: 1 },
                       hover: {
                         outline: "none",
                         opacity: 1,
-                        fill: "#121723",
-                        stroke: "rgba(255, 255, 255, 0.35)",
-                      },
-                      pressed: {
-                        outline: "none",
-                        opacity: 1,
-                        fill: "#121723",
+                        fill: "#1c2a3d",
+                        stroke: "rgba(91, 163, 220, 0.7)",
                       },
                     }}
                   />
@@ -401,10 +411,11 @@ export function MapControl({
                     key={loc.id}
                     coordinates={[loc.longitude, loc.latitude]}
                   >
-                    <g transform={`scale(${1 / position.zoom})`}>
+                    <g transform={`scale(${1 / livePosition.zoom})`}>
                       <Pin
                         category={loc.category}
                         isSelected={effectiveSelectedId === loc.id}
+                        title={loc.name}
                         onClick={() =>
                           handleMarkerClick(loc.id, [
                             loc.longitude,
@@ -435,21 +446,29 @@ export function MapControl({
                         coordinates={[lng, lat]}
                       >
                         <g
-                          transform={`scale(${1 / position.zoom})`}
+                          transform={`scale(${1 / livePosition.zoom})`}
                           onClick={() =>
                             handleClusterClick(clusterId, [lng, lat])
                           }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              handleClusterClick(clusterId, [lng, lat]);
+                            }
+                          }}
+                          role="button"
+                          aria-label={`Cluster of ${count} locations`}
                           className="cursor-pointer"
                         >
                           <circle
                             r={size}
-                            fill="rgba(91, 255, 190, 0.15)"
-                            stroke="rgba(91, 255, 190, 0.6)"
-                            strokeWidth={1}
+                            fill="rgba(91, 163, 220, 0.25)"
+                            stroke="rgba(91, 163, 220, 0.8)"
+                            strokeWidth={1.5}
                           />
                           <circle
                             r={size * 0.6}
-                            fill="rgba(91, 255, 190, 0.2)"
+                            fill="rgba(91, 163, 220, 0.35)"
                           />
                           <text
                             textAnchor="middle"
@@ -476,10 +495,11 @@ export function MapControl({
                       key={loc.id}
                       coordinates={[loc.longitude, loc.latitude]}
                     >
-                      <g transform={`scale(${1 / position.zoom})`}>
+                      <g transform={`scale(${1 / livePosition.zoom})`}>
                         <Pin
                           category={loc.category}
                           isSelected={effectiveSelectedId === loc.id}
+                          title={loc.name}
                           onClick={() =>
                             handleMarkerClick(loc.id, [
                               loc.longitude,
@@ -497,7 +517,7 @@ export function MapControl({
 
       {hoveredRegion ? (
         <div className="absolute top-6 left-6 z-30 hidden sm:block pointer-events-none">
-          <div className="rounded-full bg-white/5 border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-white/60">
+          <div className="rounded-full bg-[#141e2d]/90 border border-primary/40 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-white/90 font-medium">
             {hoveredRegion}
           </div>
         </div>

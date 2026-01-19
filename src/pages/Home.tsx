@@ -65,33 +65,6 @@ export default function Home() {
         }}
       />
 
-      {/* Header Overlay */}
-      <div className="header-overlay absolute top-0 left-0 right-0 p-6 pointer-events-none flex justify-between items-start z-40 opacity-0">
-        <div className="pointer-events-auto">
-          <div className="flex flex-col">
-            <span className="text-[10px] uppercase tracking-[0.3em] text-primary mb-1 pl-1">
-              Interactive
-            </span>
-            <h1 className="text-2xl font-display font-bold text-white tracking-tight">
-              World Explorer
-            </h1>
-          </div>
-        </div>
-
-        <div className="pointer-events-auto">
-          <button className="px-4 py-2 rounded-full bg-white/5 backdrop-blur border border-white/10 text-xs uppercase tracking-widest text-muted-foreground hover:bg-white/10 hover:text-white transition-colors">
-            Menu
-          </button>
-        </div>
-      </div>
-
-      {/* Footer Status Overlay */}
-      <div className="footer-overlay absolute bottom-0 left-0 right-0 p-6 pointer-events-none flex justify-between items-end z-30 opacity-0">
-        <div className="text-[10px] text-white/20 font-mono">
-          COORD: {selectedLocationId ? "LOCKED" : "SCANNING"} <br />
-          SYS: ONLINE
-        </div>
-      </div>
     </div>
   );
 }

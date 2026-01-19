@@ -14,7 +14,7 @@ export const motion = {
     slow: 0.8,
     zoom: 0.9,
     pulse: 1,
-    kenBurns: 10,
+    kenBurns: 2,
   },
 } as const;
 

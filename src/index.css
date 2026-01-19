@@ -8,34 +8,34 @@
   --font-display: 'Cormorant Garamond', serif;
   --font-body: 'Manrope', sans-serif;
 
-  /* Midnight Museum Theme - Deep, elegant, high contrast */
-  --background: 240 10% 4%;      /* Almost black with hint of blue */
-  --foreground: 40 20% 94%;      /* Off-white, slightly warm */
+  /* RAF Command Theme - High contrast military precision */
+  --background: 216 28% 7%;      /* Deep navy, almost black */
+  --foreground: 210 20% 98%;     /* Crisp white */
   
-  --card: 240 10% 7%;            /* Slightly lighter than bg */
-  --card-foreground: 40 20% 94%;
+  --card: 216 25% 11%;           /* Slightly lighter navy */
+  --card-foreground: 210 20% 98%;
   
-  --popover: 240 10% 7%;
-  --popover-foreground: 40 20% 94%;
+  --popover: 216 25% 11%;
+  --popover-foreground: 210 20% 98%;
   
-  --primary: 38 45% 65%;         /* Muted Gold/Brass */
-  --primary-foreground: 240 10% 4%;
+  --primary: 210 45% 55%;        /* RAF Slate Blue */
+  --primary-foreground: 210 20% 98%;
   
-  --secondary: 240 5% 15%;       /* Dark Grey */
-  --secondary-foreground: 40 20% 94%;
+  --secondary: 216 20% 18%;      /* Darker slate */
+  --secondary-foreground: 210 20% 98%;
   
-  --muted: 240 5% 15%;
-  --muted-foreground: 240 5% 60%;
+  --muted: 216 20% 18%;
+  --muted-foreground: 210 15% 55%;
   
-  --accent: 170 50% 45%;         /* Teal/Verdigris for interactive elements */
-  --accent-foreground: 240 10% 4%;
+  --accent: 354 70% 48%;         /* RAF Roundel Red */
+  --accent-foreground: 210 20% 98%;
   
-  --destructive: 0 60% 40%;
+  --destructive: 354 70% 48%;
   --destructive-foreground: 0 0% 98%;
 
-  --border: 240 5% 15%;
-  --input: 240 5% 15%;
-  --ring: 38 45% 65%;
+  --border: 216 20% 22%;
+  --input: 216 20% 18%;
+  --ring: 210 45% 55%;
   
   --radius: 0.5rem;
 }
@@ -80,27 +80,27 @@
 
 
   .map-ocean-glow {
-    background: radial-gradient(circle at 50% 45%, rgba(20, 60, 80, 0.25), rgba(5, 5, 8, 0));
+    background: radial-gradient(circle at 50% 45%, rgba(30, 58, 95, 0.4), rgba(10, 18, 30, 0));
   }
 
   .map-atmosphere {
-    background: radial-gradient(circle at 50% 50%, rgba(90, 160, 200, 0.08), rgba(5, 5, 8, 0.65));
+    background: radial-gradient(circle at 50% 50%, rgba(70, 130, 180, 0.12), rgba(10, 18, 30, 0.7));
   }
 
   .map-vignette {
-    background: radial-gradient(circle at 50% 50%, rgba(5, 5, 8, 0), rgba(5, 5, 8, 0.75));
+    background: radial-gradient(circle at 50% 50%, rgba(10, 18, 30, 0), rgba(10, 18, 30, 0.85));
   }
 
   .map-noise {
     background-image: url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNzIiIGhlaWdodD0iNzIiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGZpbHRlciBpZD0ibm9pc2UiPjxmZVR1cmJ1bGVuY2UgdHlwZT0iZnJhY3RhbE5vaXNlIiBiYXNlRnJlcXVlbmN5PSIwLjgiIG51bU9jdGF2ZXM9IjQiIHN0aXRjaFRpbGVzPSJzdGl0Y2giLz48L2ZpbHRlcj48cmVjdCB3aWR0aD0iNzIiIGhlaWdodD0iNzIiIGZpbGw9IiNmZmYiIGZpbHRlcj0idXJsKCNub2lzZSkiIG9wYWNpdHk9IjAuMDUiLz48L3N2Zz4=");
-    opacity: 0.2;
+    opacity: 0.15;
     mix-blend-mode: soft-light;
   }
 
   .map-scan {
-    background: linear-gradient(120deg, transparent 0%, rgba(91, 255, 190, 0.06) 50%, transparent 100%);
+    background: linear-gradient(120deg, transparent 0%, rgba(91, 163, 220, 0.08) 50%, transparent 100%);
     mix-blend-mode: screen;
-    opacity: 0.6;
+    opacity: 0.5;
     animation: map-scan 14s linear infinite;
   }
 
