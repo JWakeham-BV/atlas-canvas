@@ -23,6 +23,8 @@ export function Pin({ isSelected, onClick, title }: PinProps) {
       className="cursor-pointer"
       style={{ pointerEvents: "all" }}
     >
+      {/* SVG title element for native tooltip on hover */}
+      <title>{title}</title>
       {/* Larger invisible hit area for touch devices */}
       <circle r={size * 2.5} fill="transparent" />
       {/* Glow effect */}

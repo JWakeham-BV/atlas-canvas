@@ -502,7 +502,9 @@ export function MapControl({
                           role="button"
                           aria-label={`Cluster of ${count} locations`}
                           className="cursor-pointer"
+                          style={{ pointerEvents: "all" }}
                         >
+                          <title>{`${count} locations - click to zoom`}</title>
                           <circle
                             r={size}
                             fill="rgba(91, 163, 220, 0.25)"
