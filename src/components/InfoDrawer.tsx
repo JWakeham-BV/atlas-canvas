@@ -151,7 +151,7 @@ export function InfoDrawer({ locationId, onClose }: InfoDrawerProps) {
   return (
     <div
       ref={panelRef}
-      className={`fixed left-4 right-4 top-1/2 -translate-y-1/2 z-50 w-[calc(100%-2rem)] max-w-[480px] sm:left-auto sm:right-6 sm:top-24 sm:bottom-6 sm:w-[360px] sm:translate-y-0 transition-opacity ${
+      className={`fixed inset-4 sm:top-1/2 sm:-translate-y-1/2 z-50 w-[calc(100%-2rem)] max-w-[480px] sm:left-auto sm:right-6 sm:top-24 sm:bottom-auto sm:w-[360px] sm:translate-y-0 transition-opacity ${
         isOpen
           ? "pointer-events-auto opacity-100 translate-x-0"
           : "pointer-events-none opacity-0 translate-x-8"
