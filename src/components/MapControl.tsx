@@ -127,7 +127,7 @@ export function MapControl({
     setLivePosition(position);
   }, [position]);
   const [activeRegionId, setActiveRegionId] = useState<string>("world");
-  const [isRegionsOpen, setIsRegionsOpen] = useState(true);
+  const [isRegionsOpen, setIsRegionsOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [hoveredRegion, setHoveredRegion] = useState<string | null>(null);
   const [pendingSelectionId, setPendingSelectionId] = useState<number | null>(

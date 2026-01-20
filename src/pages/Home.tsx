@@ -61,7 +61,6 @@ export default function Home() {
         locationId={selectedLocationId}
         onClose={() => {
           setSelectedLocationId(null);
-          setResetViewToken((token) => token + 1);
         }}
       />
 
