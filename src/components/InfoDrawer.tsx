@@ -2,7 +2,7 @@ import { useLocation } from "@/hooks/use-locations";
 import { motion } from "@/lib/motion";
 import gsap from "gsap";
 import { MapPin, Radar as RadarIcon, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { OperationModal } from "./OperationModal";
 
 interface InfoDrawerProps {
@@ -36,8 +36,17 @@ export function InfoDrawer({ locationId, onClose }: InfoDrawerProps) {
     setIsModalOpen(false);
   }, []);
 
+  // Set initial hidden state before first paint to prevent flash
+  useLayoutEffect(() => {
+    if (panelRef.current && !locationId) {
+      gsap.set(panelRef.current, { x: 80, opacity: 0, scale: 0.98 });
+    }
+  }, []);
+
   const animatePanelIn = () => {
     if (!panelRef.current) return;
+    // Kill any existing animations on the panel first
+    gsap.killTweensOf(panelRef.current);
     gsap.fromTo(
       panelRef.current,
       { x: 80, opacity: 0, scale: 0.98 },
@@ -53,6 +62,8 @@ export function InfoDrawer({ locationId, onClose }: InfoDrawerProps) {
 
   const animatePanelOut = (onComplete?: () => void) => {
     if (!panelRef.current) return;
+    // Kill any existing animations on the panel first
+    gsap.killTweensOf(panelRef.current);
     gsap.to(panelRef.current, {
       x: 80,
       opacity: 0,
@@ -88,34 +99,39 @@ export function InfoDrawer({ locationId, onClose }: InfoDrawerProps) {
     );
   };
 
+  // Track if we're in the middle of closing to prevent cleanup from reverting animations
+  const isClosingRef = useRef(false);
+
   useEffect(() => {
     if (!panelRef.current) return;
-    const ctx = gsap.context(() => {
-      if (locationId) {
-        if (!isOpen) {
-          setIsOpen(true);
-          animatePanelIn();
-        }
-
-        if (!displayedLocationId) {
-          setDisplayedLocationId(locationId);
-          return;
-        }
-
-        if (locationId !== displayedLocationId) {
-          animateContentOut(() => setDisplayedLocationId(locationId));
-        }
-      } else if (displayedLocationId) {
-        animateContentOut(() => {
-          animatePanelOut(() => {
-            setDisplayedLocationId(null);
-            setIsOpen(false);
-          });
-        });
+    
+    // Don't create a context that will revert our closing animation
+    if (isClosingRef.current) return;
+    
+    if (locationId) {
+      if (!isOpen) {
+        setIsOpen(true);
+        animatePanelIn();
       }
-    }, panelRef);
 
-    return () => ctx.revert();
+      if (!displayedLocationId) {
+        setDisplayedLocationId(locationId);
+        return;
+      }
+
+      if (locationId !== displayedLocationId) {
+        animateContentOut(() => setDisplayedLocationId(locationId));
+      }
+    } else if (displayedLocationId) {
+      isClosingRef.current = true;
+      animateContentOut(() => {
+        animatePanelOut(() => {
+          setDisplayedLocationId(null);
+          setIsOpen(false);
+          isClosingRef.current = false;
+        });
+      });
+    }
   }, [locationId, displayedLocationId, isOpen]);
 
   useEffect(() => {
@@ -151,10 +167,8 @@ export function InfoDrawer({ locationId, onClose }: InfoDrawerProps) {
   return (
     <div
       ref={panelRef}
-      className={`fixed inset-4 sm:top-1/2 sm:-translate-y-1/2 z-50 w-[calc(100%-2rem)] max-w-[480px] sm:left-auto sm:right-6 sm:top-24 sm:bottom-auto sm:w-[360px] sm:translate-y-0 transition-opacity ${
-        isOpen
-          ? "pointer-events-auto opacity-100 translate-x-0"
-          : "pointer-events-none opacity-0 translate-x-8"
+      className={`fixed inset-4 sm:top-1/2 sm:-translate-y-1/2 z-50 w-[calc(100%-2rem)] max-w-[480px] sm:left-auto sm:right-6 sm:top-24 sm:bottom-auto sm:w-[360px] sm:translate-y-0 ${
+        isOpen ? "pointer-events-auto" : "pointer-events-none"
       }`}
     >
       <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-[#141e2d] via-[#111a28] to-[#0e1621] border border-primary/30 shadow-2xl" />
