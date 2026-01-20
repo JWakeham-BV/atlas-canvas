@@ -86,53 +86,18 @@ export function OperationModal({
         { opacity: 1, duration: 0.6, ease: "power2.out" }
       );
 
-      // Modal morphs from source with elastic feel
-      if (sourceRect && modalRef.current) {
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
-        const startScaleX = sourceRect.width / viewportWidth;
-        const startScaleY = sourceRect.height / viewportHeight;
-        const startScale = Math.max(startScaleX, startScaleY);
-        const startX = sourceRect.left + sourceRect.width / 2 - viewportWidth / 2;
-        const startY = sourceRect.top + sourceRect.height / 2 - viewportHeight / 2;
-
-        tl.fromTo(
-          modalRef.current,
-          {
-            x: startX,
-            y: startY,
-            scale: startScale,
-            opacity: 0,
-            borderRadius: "24px",
-            rotateX: 15,
-            transformPerspective: 1200,
-          },
-          {
-            x: 0,
-            y: 0,
-            scale: 1,
-            opacity: 1,
-            borderRadius: "0px",
-            rotateX: 0,
-            duration: 0.9,
-            ease: "expo.out",
-          },
-          0.1
-        );
-      } else {
-        tl.fromTo(
-          modalRef.current,
-          { scale: 0.8, opacity: 0, rotateX: 20, transformPerspective: 1200 },
-          {
-            scale: 1,
-            opacity: 1,
-            rotateX: 0,
-            duration: 0.9,
-            ease: "expo.out",
-          },
-          0.1
-        );
-      }
+      // Simple fade in and up from center
+      tl.fromTo(
+        modalRef.current,
+        { opacity: 0, y: 40 },
+        {
+          opacity: 1,
+          y: 0,
+          duration: 0.6,
+          ease: "power2.out",
+        },
+        0.1
+      );
 
       // Header slides down with bounce
       tl.fromTo(
@@ -206,43 +171,17 @@ export function OperationModal({
         ease: "power2.in",
       });
 
-      // Modal shrinks back
-      if (sourceRect && modalRef.current) {
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
-        const startScaleX = sourceRect.width / viewportWidth;
-        const startScaleY = sourceRect.height / viewportHeight;
-        const startScale = Math.max(startScaleX, startScaleY);
-        const startX = sourceRect.left + sourceRect.width / 2 - viewportWidth / 2;
-        const startY = sourceRect.top + sourceRect.height / 2 - viewportHeight / 2;
-
-        tl.to(
-          modalRef.current,
-          {
-            x: startX,
-            y: startY,
-            scale: startScale,
-            opacity: 0,
-            borderRadius: "24px",
-            rotateX: 10,
-            duration: 0.5,
-            ease: "power3.in",
-          },
-          0.15
-        );
-      } else {
-        tl.to(
-          modalRef.current,
-          {
-            scale: 0.9,
-            opacity: 0,
-            rotateX: 10,
-            duration: 0.5,
-            ease: "power3.in",
-          },
-          0.15
-        );
-      }
+      // Simple fade out and down
+      tl.to(
+        modalRef.current,
+        {
+          opacity: 0,
+          y: 40,
+          duration: 0.4,
+          ease: "power2.in",
+        },
+        0.15
+      );
 
       tl.to(
         backdropRef.current,
@@ -517,7 +456,7 @@ export function OperationModal({
       <div
         ref={modalRef}
         className="relative w-full h-full bg-gradient-to-br from-[#141e2d]/95 via-[#111a28]/95 to-[#0e1621]/95 overflow-hidden"
-        style={{ transformStyle: "preserve-3d", opacity: 0 }}
+        style={{ opacity: 0, transform: "translateY(40px)" }}
       >
         {/* Decorative gradients */}
         <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-accent/5 opacity-80 pointer-events-none" />
