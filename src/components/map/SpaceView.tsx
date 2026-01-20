@@ -12,6 +12,7 @@ interface SpaceOverlayProps {
   onClose: () => void;
   mapWidth: number;
   mapHeight: number;
+  isMobile: boolean;
 }
 
 interface OrbitRingProps {
@@ -230,10 +231,11 @@ export function SpaceOverlay({
   onClose,
   mapWidth,
   mapHeight,
+  isMobile,
 }: SpaceOverlayProps) {
-  const containerRef = useRef<SVGSVGElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const svgContainerRef = useRef<SVGSVGElement>(null);
   const ringsRef = useRef<SVGGElement>(null);
-  const backdropRef = useRef<SVGRectElement>(null);
   const spaceOperations = useSpaceOperations();
   
   // Track if we should render (stays true during exit animation)
@@ -241,10 +243,11 @@ export function SpaceOverlay({
   const isAnimatingRef = useRef(false);
   const hasAnimatedIn = useRef(false);
 
+  // Desktop: center in middle of viewport for full circles
   const centerX = mapWidth / 2;
   const centerY = mapHeight / 2;
   
-  // Calculate ring sizes based on viewport - leave room for padding
+  // Calculate ring sizes based on viewport
   const padding = 80;
   const maxRadius = Math.min(mapWidth, mapHeight) / 2 - padding;
   const minRadius = 60;
@@ -303,9 +306,23 @@ export function SpaceOverlay({
     }));
   }, [mapWidth, mapHeight]);
 
+  // Handle escape key to close
+  useEffect(() => {
+    if (!isActive) return;
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isActive, onClose]);
+
   // Handle enter animation
   const animateIn = useCallback(() => {
-    if (!containerRef.current || !ringsRef.current || isAnimatingRef.current || hasAnimatedIn.current) return;
+    if (!containerRef.current || isAnimatingRef.current || hasAnimatedIn.current) return;
     
     isAnimatingRef.current = true;
     hasAnimatedIn.current = true;
@@ -324,18 +341,20 @@ export function SpaceOverlay({
       0
     );
     
-    // Animate rings expanding from center
-    tl.fromTo(
-      ringsRef.current,
-      { opacity: 0, scale: 0.5 },
-      { opacity: 1, scale: 1, duration: motion.duration.slow, ease: "power2.out" },
-      0.1
-    );
-  }, []);
+    // Animate rings expanding from center (desktop only)
+    if (ringsRef.current && !isMobile) {
+      tl.fromTo(
+        ringsRef.current,
+        { opacity: 0, scale: 0.5 },
+        { opacity: 1, scale: 1, duration: motion.duration.slow, ease: "power2.out" },
+        0.1
+      );
+    }
+  }, [isMobile]);
 
   // Handle exit animation
   const animateOut = useCallback(() => {
-    if (!containerRef.current || !ringsRef.current || isAnimatingRef.current) return;
+    if (!containerRef.current || isAnimatingRef.current) return;
     
     isAnimatingRef.current = true;
     
@@ -347,12 +366,14 @@ export function SpaceOverlay({
       },
     });
     
-    // Animate rings collapsing to center
-    tl.to(
-      ringsRef.current,
-      { opacity: 0, scale: 0.6, duration: motion.duration.base, ease: "power2.in" },
-      0
-    );
+    // Animate rings collapsing to center (desktop only)
+    if (ringsRef.current && !isMobile) {
+      tl.to(
+        ringsRef.current,
+        { opacity: 0, scale: 0.6, duration: motion.duration.base, ease: "power2.in" },
+        0
+      );
+    }
     
     // Fade out container
     tl.to(
@@ -360,7 +381,7 @@ export function SpaceOverlay({
       { opacity: 0, duration: motion.duration.base, ease: motion.ease.in },
       0.05
     );
-  }, []);
+  }, [isMobile]);
 
   // Handle isActive changes
   useEffect(() => {
@@ -384,100 +405,229 @@ export function SpaceOverlay({
 
   if (!shouldRender) return null;
 
+  // Mobile: Vertical list layout
+  if (isMobile) {
+    return (
+      <div 
+        ref={containerRef}
+        className="absolute inset-0 z-20 flex flex-col"
+        style={{ pointerEvents: "none" }}
+      >
+        {/* Dark overlay backdrop */}
+        <div 
+          className="absolute inset-0 bg-[#050a12]/85"
+          style={{ pointerEvents: "all" }}
+          onClick={onClose}
+        />
+        
+        {/* Scrollable list */}
+        <div 
+          className="relative flex-1 overflow-y-auto pt-16 pb-24 px-4"
+          style={{ pointerEvents: "all" }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="space-y-3">
+            {spaceOperations.map((op, index) => (
+              <MobileSpaceCard
+                key={op.id}
+                operation={op}
+                isSelected={selectedOperationId === op.id}
+                onClick={() => onOperationSelect(op.id)}
+                delay={0.05 + index * 0.03}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Desktop: Orbital rings view
   return (
-    <svg 
+    <div 
       ref={containerRef}
-      width={mapWidth} 
-      height={mapHeight} 
       className="absolute inset-0 z-20"
       style={{ pointerEvents: "none" }}
     >
-      {/* Dark overlay to dim the map */}
-      <rect
-        ref={backdropRef}
-        x={0}
-        y={0}
-        width={mapWidth}
-        height={mapHeight}
-        fill="rgba(5, 10, 18, 0.75)"
-        style={{ pointerEvents: "all" }}
-        onClick={onClose}
-      />
-
-      {/* Subtle stars */}
-      {stars.map((star, i) => (
-        <circle
-          key={i}
-          cx={star.x}
-          cy={star.y}
-          r={star.size}
-          fill={`rgba(255, 255, 255, ${star.opacity})`}
+      <svg 
+        ref={svgContainerRef}
+        width={mapWidth} 
+        height={mapHeight} 
+        className="absolute inset-0"
+      >
+        {/* Dark overlay to dim the map */}
+        <rect
+          x={0}
+          y={0}
+          width={mapWidth}
+          height={mapHeight}
+          fill="rgba(5, 10, 18, 0.75)"
+          style={{ pointerEvents: "all" }}
+          onClick={onClose}
         />
-      ))}
 
-      {/* Scan line effect */}
-      <defs>
-        <linearGradient id="scanGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="rgba(91, 163, 220, 0)" />
-          <stop offset="50%" stopColor="rgba(91, 163, 220, 0.08)" />
-          <stop offset="100%" stopColor="rgba(91, 163, 220, 0)" />
-        </linearGradient>
-      </defs>
-      <rect
-        x={0}
-        y={0}
-        width={mapWidth}
-        height={mapHeight}
-        fill="url(#scanGradient)"
-        className="animate-scan"
-        style={{ pointerEvents: "none" }}
-      />
-
-      {/* Center crosshair / reference point */}
-      <g opacity={0.3}>
-        <line
-          x1={centerX - 20}
-          y1={centerY}
-          x2={centerX + 20}
-          y2={centerY}
-          stroke="rgba(91, 163, 220, 0.5)"
-          strokeWidth={1}
-        />
-        <line
-          x1={centerX}
-          y1={centerY - 20}
-          x2={centerX}
-          y2={centerY + 20}
-          stroke="rgba(91, 163, 220, 0.5)"
-          strokeWidth={1}
-        />
-        <circle
-          cx={centerX}
-          cy={centerY}
-          r={8}
-          fill="none"
-          stroke="rgba(91, 163, 220, 0.4)"
-          strokeWidth={1}
-        />
-      </g>
-
-      {/* Orbit rings with operations */}
-      <g ref={ringsRef} style={{ transformOrigin: `${centerX}px ${centerY}px` }}>
-        {orbitRings.map((ring, index) => (
-          <OrbitRing
-            key={ring.type}
-            operations={ring.operations}
-            radius={ring.radius}
-            label={ring.label}
-            centerX={centerX}
-            centerY={centerY}
-            selectedId={selectedOperationId}
-            onSelect={onOperationSelect}
-            delay={0.15 + index * 0.08}
+        {/* Subtle stars */}
+        {stars.map((star, i) => (
+          <circle
+            key={i}
+            cx={star.x}
+            cy={star.y}
+            r={star.size}
+            fill={`rgba(255, 255, 255, ${star.opacity})`}
           />
         ))}
-      </g>
-    </svg>
+
+        {/* Center crosshair / reference point */}
+        <g opacity={0.3}>
+          <line
+            x1={centerX - 20}
+            y1={centerY}
+            x2={centerX + 20}
+            y2={centerY}
+            stroke="rgba(91, 163, 220, 0.5)"
+            strokeWidth={1}
+          />
+          <line
+            x1={centerX}
+            y1={centerY - 20}
+            x2={centerX}
+            y2={centerY + 20}
+            stroke="rgba(91, 163, 220, 0.5)"
+            strokeWidth={1}
+          />
+          <circle
+            cx={centerX}
+            cy={centerY}
+            r={8}
+            fill="none"
+            stroke="rgba(91, 163, 220, 0.4)"
+            strokeWidth={1}
+          />
+        </g>
+
+        {/* Orbit rings with operations */}
+        <g ref={ringsRef} style={{ transformOrigin: `${centerX}px ${centerY}px` }}>
+          {orbitRings.map((ring, index) => (
+            <OrbitRing
+              key={ring.type}
+              operations={ring.operations}
+              radius={ring.radius}
+              label={ring.label}
+              centerX={centerX}
+              centerY={centerY}
+              selectedId={selectedOperationId}
+              onSelect={onOperationSelect}
+              delay={0.15 + index * 0.08}
+            />
+          ))}
+        </g>
+      </svg>
+    </div>
+  );
+}
+
+// Mobile card component for list view
+interface MobileSpaceCardProps {
+  operation: SpaceOperation;
+  isSelected: boolean;
+  onClick: () => void;
+  delay: number;
+}
+
+function MobileSpaceCard({ operation, isSelected, onClick, delay }: MobileSpaceCardProps) {
+  const cardRef = useRef<HTMLButtonElement>(null);
+
+  const categoryColors: Record<string, string> = {
+    reconnaissance: "bg-blue-500/20 border-blue-500/40 text-blue-400",
+    communications: "bg-green-500/20 border-green-500/40 text-green-400",
+    intelligence: "bg-amber-500/20 border-amber-500/40 text-amber-400",
+    navigation: "bg-violet-500/20 border-violet-500/40 text-violet-400",
+    research: "bg-cyan-500/20 border-cyan-500/40 text-cyan-400",
+    defense: "bg-red-500/20 border-red-500/40 text-red-400",
+  };
+
+  const dotColors: Record<string, string> = {
+    reconnaissance: "bg-blue-400",
+    communications: "bg-green-400",
+    intelligence: "bg-amber-400",
+    navigation: "bg-violet-400",
+    research: "bg-cyan-400",
+    defense: "bg-red-400",
+  };
+
+  useGSAP(() => {
+    if (!cardRef.current) return;
+    
+    gsap.fromTo(
+      cardRef.current,
+      { opacity: 0, y: 20 },
+      {
+        opacity: 1,
+        y: 0,
+        duration: motion.duration.base,
+        ease: motion.ease.out,
+        delay,
+      }
+    );
+  }, [delay]);
+
+  const colorClass = categoryColors[operation.category] || categoryColors.reconnaissance;
+  const dotClass = dotColors[operation.category] || dotColors.reconnaissance;
+
+  return (
+    <button
+      ref={cardRef}
+      onClick={onClick}
+      className={`
+        w-full text-left p-4 rounded-xl border backdrop-blur-sm
+        transition-all duration-200
+        ${isSelected 
+          ? 'bg-white/10 border-white/30 ring-1 ring-white/20' 
+          : 'bg-[#141e2d]/60 border-primary/20 hover:bg-[#1c2a3d]/60 hover:border-primary/40'
+        }
+      `}
+      style={{ opacity: 0 }}
+    >
+      <div className="flex items-start gap-3">
+        {/* Category dot */}
+        <div className={`w-3 h-3 rounded-full mt-1 ${dotClass} shadow-lg`} 
+          style={{ boxShadow: `0 0 8px currentColor` }} 
+        />
+        
+        <div className="flex-1 min-w-0">
+          {/* Name */}
+          <div className="font-medium text-white text-sm mb-1">
+            {operation.name}
+          </div>
+          
+          {/* Metadata row */}
+          <div className="flex items-center gap-2 text-xs text-white/60">
+            <span className={`px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider ${colorClass}`}>
+              {operation.category}
+            </span>
+            <span className="text-white/40">•</span>
+            <span>{operation.orbitType}</span>
+            <span className="text-white/40">•</span>
+            <span>{operation.altitude}</span>
+          </div>
+        </div>
+
+        {/* Chevron */}
+        <svg 
+          width="16" 
+          height="16" 
+          viewBox="0 0 24 24" 
+          fill="none" 
+          stroke="currentColor" 
+          strokeWidth="2" 
+          strokeLinecap="round" 
+          strokeLinejoin="round"
+          className={`text-white/40 transition-colors ${isSelected ? 'text-white/80' : ''}`}
+        >
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
+      </div>
+    </button>
   );
 }
 

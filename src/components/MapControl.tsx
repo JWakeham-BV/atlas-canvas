@@ -566,6 +566,7 @@ export function MapControl({
         onClose={handleToggleSpaceOverlay}
         mapWidth={mapWidth}
         mapHeight={mapHeight}
+        isMobile={isMobile}
       />
 
       {/* Space Trigger - pull down tab at top */}
