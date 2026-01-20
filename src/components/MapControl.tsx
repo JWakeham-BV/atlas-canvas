@@ -1,4 +1,4 @@
-import { useLocations } from "@/hooks/use-locations";
+import { useLocations, useSpaceOperations } from "@/hooks/use-locations";
 import { motion } from "@/lib/motion";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
@@ -14,7 +14,7 @@ import {
 } from "react-simple-maps";
 import { Pin } from "./Pin";
 import { RegionMenu } from "./map/RegionMenu";
-import { SpaceView } from "./map/SpaceView";
+import { SpaceOverlay, SpaceTrigger } from "./map/SpaceView";
 import { ZoomControls } from "./map/ZoomControls";
 import { getMercatorBounds } from "./map/geo";
 import { useClusters } from "./map/useClusters";
@@ -139,6 +139,9 @@ export function MapControl({
     null
   );
 
+  const [isSpaceOverlayOpen, setIsSpaceOverlayOpen] = useState(false);
+  const spaceOperations = useSpaceOperations();
+
   const regions = useMemo<Region[]>(
     () => [
       {
@@ -146,13 +149,6 @@ export function MapControl({
         label: "World",
         coordinates: defaultPosition.coordinates,
         zoom: defaultPosition.zoom,
-        bounds: [-180, -85, 180, 85] as [number, number, number, number],
-      },
-      {
-        id: "space",
-        label: "Space",
-        coordinates: [0, 0] as [number, number],
-        zoom: 1,
         bounds: [-180, -85, 180, 85] as [number, number, number, number],
       },
       {
@@ -207,8 +203,6 @@ export function MapControl({
     ],
     [defaultPosition]
   );
-
-  const isSpaceView = activeRegionId === "space";
 
   useGSAP(
     () => {
@@ -272,13 +266,10 @@ export function MapControl({
   };
 
   const resolveRegionId = (coordinates: [number, number], zoom: number) => {
-    // Don't auto-resolve to space - it should only be selected explicitly
-    if (activeRegionId === "space") return "space";
     if (zoom <= 1.3) return "world";
     const [lng, lat] = coordinates;
     const match = regions.find((region) => {
-      // Skip world and space from auto-detection
-      if (region.id === "world" || region.id === "space") return false;
+      if (region.id === "world") return false;
       const [minLng, minLat, maxLng, maxLat] = region.bounds;
       return lng >= minLng && lng <= maxLng && lat >= minLat && lat <= maxLat;
     });
@@ -341,21 +332,11 @@ export function MapControl({
     coordinates: [number, number];
     zoom: number;
   }) => {
-    // Clear any selections when switching regions
-    if (region.id === "space") {
-      onLocationSelect(null);
-    } else if (activeRegionId === "space") {
-      onSpaceOperationSelect?.(null);
-    }
-    
     setActiveRegionId(region.id);
-    
-    if (region.id !== "space") {
-      animatePosition({
-        coordinates: region.coordinates,
-        zoom: Math.min(6, region.zoom),
-      });
-    }
+    animatePosition({
+      coordinates: region.coordinates,
+      zoom: Math.min(6, region.zoom),
+    });
     
     if (isMobile) {
       setIsRegionsOpen(false);
@@ -364,6 +345,17 @@ export function MapControl({
 
   const handleSpaceOperationClick = (operationId: number) => {
     onSpaceOperationSelect?.(operationId);
+  };
+
+  const handleToggleSpaceOverlay = () => {
+    if (isSpaceOverlayOpen) {
+      // Closing - clear selection
+      onSpaceOperationSelect?.(null);
+    } else {
+      // Opening - clear ground selection
+      onLocationSelect(null);
+    }
+    setIsSpaceOverlayOpen(!isSpaceOverlayOpen);
   };
 
   const regionMenu = (
@@ -384,24 +376,19 @@ export function MapControl({
   return (
     <div
       ref={containerRef}
-      className={`relative w-full h-full overflow-hidden transition-colors duration-700 ${
-        isSpaceView ? 'bg-[#050a10]' : 'bg-[#0a121e]'
-      }`}
+      className="relative w-full h-full overflow-hidden bg-[#0a121e]"
     >
-      <div className={`absolute inset-0 map-ocean-glow pointer-events-none transition-opacity duration-700 ${isSpaceView ? 'opacity-0' : 'opacity-100'}`} />
-      <div className={`absolute inset-0 map-atmosphere pointer-events-none transition-opacity duration-700 ${isSpaceView ? 'opacity-0' : 'opacity-100'}`} />
-      <div className={`absolute inset-0 map-vignette pointer-events-none transition-opacity duration-700 ${isSpaceView ? 'opacity-30' : 'opacity-100'}`} />
-      <div className={`absolute inset-0 map-noise pointer-events-none transition-opacity duration-700 ${isSpaceView ? 'opacity-5' : 'opacity-15'}`} />
+      <div className="absolute inset-0 map-ocean-glow pointer-events-none" />
+      <div className="absolute inset-0 map-atmosphere pointer-events-none" />
+      <div className="absolute inset-0 map-vignette pointer-events-none" />
+      <div className="absolute inset-0 map-noise pointer-events-none" />
 
       {/* Earth Map View */}
       <div 
         ref={mapRef} 
-        className={`w-full h-full transition-all duration-700 ease-out ${
-          isSpaceView ? 'opacity-0 scale-[0.3] blur-md pointer-events-none' : 'opacity-100 scale-100 blur-0'
+        className={`w-full h-full transition-all duration-500 ease-out ${
+          isSpaceOverlayOpen ? 'blur-sm saturate-50' : 'blur-0 saturate-100'
         }`}
-        style={{
-          transformOrigin: isMobile ? 'left center' : 'center center',
-        }}
       >
         <ComposableMap
           width={mapWidth}
@@ -571,27 +558,24 @@ export function MapControl({
         </ComposableMap>
       </div>
 
-      {/* Space View */}
-      <div 
-        className={`absolute inset-0 transition-all duration-700 ease-out ${
-          isSpaceView ? 'opacity-100 scale-100' : 'opacity-0 scale-110 pointer-events-none'
-        }`}
-      >
-        <svg width={mapWidth} height={mapHeight} className="w-full h-full">
-          <SpaceView
-            isActive={isSpaceView}
-            selectedOperationId={selectedSpaceOperationId ?? null}
-            onOperationSelect={handleSpaceOperationClick}
-            mapWidth={mapWidth}
-            mapHeight={mapHeight}
-            isMobile={isMobile}
-          />
-        </svg>
-        {/* Edge gradient overlay for space view */}
-        <div className="absolute inset-0 space-edge-gradient pointer-events-none" />
-      </div>
+      {/* Space Overlay */}
+      <SpaceOverlay
+        isActive={isSpaceOverlayOpen}
+        selectedOperationId={selectedSpaceOperationId ?? null}
+        onOperationSelect={handleSpaceOperationClick}
+        onClose={handleToggleSpaceOverlay}
+        mapWidth={mapWidth}
+        mapHeight={mapHeight}
+      />
 
-      {hoveredRegion && !isSpaceView ? (
+      {/* Space Trigger - pull down tab at top */}
+      <SpaceTrigger
+        isActive={isSpaceOverlayOpen}
+        onToggle={handleToggleSpaceOverlay}
+        operationCount={spaceOperations.length}
+      />
+
+      {hoveredRegion && !isSpaceOverlayOpen ? (
         <div className="absolute top-6 left-6 z-30 hidden sm:block pointer-events-none">
           <div className="rounded-full bg-[#141e2d]/90 border border-primary/40 px-3 py-1 text-[10px] uppercase tracking-[0.3em] text-white/90 font-medium">
             {hoveredRegion}
@@ -599,35 +583,17 @@ export function MapControl({
         </div>
       ) : null}
 
-      <div className="absolute top-24 left-6 z-30 hidden sm:block">
+      <div className={`absolute top-24 left-6 z-30 hidden sm:block transition-opacity duration-300 ${isSpaceOverlayOpen ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
         {regionMenu}
       </div>
 
-      {!isSpaceView && (
-        <div className="absolute bottom-8 right-8 hidden sm:flex sm:flex-col sm:gap-4">
-          {zoomControls}
-        </div>
-      )}
+      <div className={`absolute bottom-8 right-8 hidden sm:flex sm:flex-col sm:gap-4 transition-opacity duration-300 ${isSpaceOverlayOpen ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+        {zoomControls}
+      </div>
 
-      {/* Close button for space view */}
-      {isSpaceView && (
-        <button
-          onClick={() => handleRegionSelect(regions[0])} // regions[0] is "World"
-          className="absolute bottom-8 right-8 z-30 flex items-center gap-2 px-4 py-2 rounded-full bg-[#141e2d]/90 border border-primary/40 text-white/90 text-xs uppercase tracking-[0.2em] font-medium hover:bg-[#1c2a3d] hover:border-primary/60 transition-colors"
-          aria-label="Exit space view"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-          <span className="hidden sm:inline">Exit Space View</span>
-          <span className="sm:hidden">Exit</span>
-        </button>
-      )}
-
-      <div className="absolute bottom-6 left-4 right-4 z-30 flex items-end justify-end gap-3 sm:hidden">
+      <div className={`absolute bottom-6 left-4 right-4 z-30 flex items-end justify-end gap-3 sm:hidden transition-opacity duration-300 ${isSpaceOverlayOpen ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
         <div className="w-full">{regionMenu}</div>
-        {!isSpaceView && zoomControls}
+        {zoomControls}
       </div>
     </div>
   );

@@ -2,16 +2,16 @@ import { useSpaceOperations } from "@/hooks/use-locations";
 import { motion } from "@/lib/motion";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
-import { useRef, useMemo } from "react";
+import { useRef, useMemo, useState, useEffect, useCallback } from "react";
 import type { SpaceOperation } from "@shared/data";
 
-interface SpaceViewProps {
+interface SpaceOverlayProps {
   isActive: boolean;
   selectedOperationId: number | null;
   onOperationSelect: (id: number) => void;
+  onClose: () => void;
   mapWidth: number;
   mapHeight: number;
-  isMobile: boolean;
 }
 
 interface OrbitRingProps {
@@ -23,9 +23,6 @@ interface OrbitRingProps {
   selectedId: number | null;
   onSelect: (id: number) => void;
   delay: number;
-  isMobile: boolean;
-  arcStart?: number;
-  arcEnd?: number;
 }
 
 function OrbitRing({
@@ -37,75 +34,50 @@ function OrbitRing({
   selectedId,
   onSelect,
   delay,
-  isMobile,
-  arcStart = 0,
-  arcEnd = Math.PI * 2,
 }: OrbitRingProps) {
   const ringRef = useRef<SVGGElement>(null);
-  const labelRef = useRef<SVGTextElement>(null);
 
   useGSAP(() => {
     if (!ringRef.current) return;
     
+    // Animate ring expanding outward
     gsap.fromTo(
       ringRef.current,
-      { opacity: 0, scale: 0.8 },
+      { opacity: 0, scale: 0.6 },
       {
         opacity: 1,
         scale: 1,
         duration: motion.duration.slow,
-        ease: motion.ease.out,
+        ease: "power2.out",
         delay,
       }
     );
   }, [delay]);
 
-  // For mobile, distribute pins only on the visible arc (right side)
-  const arcRange = arcEnd - arcStart;
-  const angleStep = arcRange / Math.max(operations.length + 1, 2);
-  
-  // Create arc path for partial circles on mobile
-  const createArcPath = (cx: number, cy: number, r: number, start: number, end: number) => {
-    const startX = cx + r * Math.cos(start);
-    const startY = cy + r * Math.sin(start);
-    const endX = cx + r * Math.cos(end);
-    const endY = cy + r * Math.sin(end);
-    const largeArc = end - start > Math.PI ? 1 : 0;
-    return `M ${startX} ${startY} A ${r} ${r} 0 ${largeArc} 1 ${endX} ${endY}`;
-  };
+  const angleStep = (2 * Math.PI) / Math.max(operations.length, 1);
+  const startAngle = -Math.PI / 2; // Start from top
 
   return (
-    <g ref={ringRef} opacity={0}>
-      {/* Orbit path - full circle on desktop, arc on mobile */}
-      {isMobile ? (
-        <path
-          d={createArcPath(centerX, centerY, radius, arcStart, arcEnd)}
-          fill="none"
-          stroke="rgba(91, 163, 220, 0.15)"
-          strokeWidth={1}
-          strokeDasharray="4 4"
-        />
-      ) : (
-        <circle
-          cx={centerX}
-          cy={centerY}
-          r={radius}
-          fill="none"
-          stroke="rgba(91, 163, 220, 0.15)"
-          strokeWidth={1}
-          strokeDasharray="4 4"
-        />
-      )}
+    <g ref={ringRef} opacity={0} style={{ transformOrigin: `${centerX}px ${centerY}px` }}>
+      {/* Full circle orbit path */}
+      <circle
+        cx={centerX}
+        cy={centerY}
+        r={radius}
+        fill="none"
+        stroke="rgba(91, 163, 220, 0.2)"
+        strokeWidth={1}
+        strokeDasharray="6 4"
+      />
       
-      {/* Orbit label - positioned at top of arc */}
+      {/* Orbit label */}
       <text
-        ref={labelRef}
-        x={isMobile ? centerX + radius * Math.cos(-Math.PI * 0.35) : centerX + radius + 8}
-        y={isMobile ? centerY + radius * Math.sin(-Math.PI * 0.35) - 8 : centerY}
-        fill="rgba(91, 163, 220, 0.5)"
-        fontSize={isMobile ? 9 : 10}
+        x={centerX}
+        y={centerY - radius - 8}
+        fill="rgba(91, 163, 220, 0.6)"
+        fontSize={9}
         fontFamily="var(--font-body)"
-        textAnchor={isMobile ? "middle" : "start"}
+        textAnchor="middle"
         dominantBaseline="middle"
         className="uppercase tracking-widest"
       >
@@ -114,7 +86,7 @@ function OrbitRing({
 
       {/* Operation pins */}
       {operations.map((op, index) => {
-        const angle = arcStart + angleStep * (index + 1);
+        const angle = startAngle + index * angleStep;
         const x = centerX + radius * Math.cos(angle);
         const y = centerY + radius * Math.sin(angle);
         const isSelected = selectedId === op.id;
@@ -127,7 +99,7 @@ function OrbitRing({
             operation={op}
             isSelected={isSelected}
             onClick={() => onSelect(op.id)}
-            delay={delay + 0.1 + index * 0.05}
+            delay={delay + 0.05 + index * 0.03}
           />
         );
       })}
@@ -162,7 +134,7 @@ function SpacePin({ x, y, operation, isSelected, onClick, delay }: SpacePinProps
     );
   }, [delay]);
 
-  const size = 8;
+  const size = 10;
   const categoryColors: Record<string, { fill: string; glow: string }> = {
     reconnaissance: { fill: "#5ba3dc", glow: "rgba(91, 163, 220, 0.6)" },
     communications: { fill: "#4ade80", glow: "rgba(74, 222, 128, 0.6)" },
@@ -191,15 +163,15 @@ function SpacePin({ x, y, operation, isSelected, onClick, delay }: SpacePinProps
       style={{ pointerEvents: "all" }}
     >
       {/* Hit area */}
-      <circle cx={x} cy={y} r={size * 3} fill="transparent" />
+      <circle cx={x} cy={y} r={size * 2.5} fill="transparent" />
       
       {/* Glow */}
       <circle
         cx={x}
         cy={y}
-        r={size}
-        fill={isSelected ? "rgba(255, 255, 255, 0.4)" : colors.glow}
-        style={{ filter: "blur(4px)" }}
+        r={size * 1.2}
+        fill={isSelected ? "rgba(255, 255, 255, 0.5)" : colors.glow}
+        style={{ filter: "blur(6px)" }}
       />
       
       {/* Main pin */}
@@ -208,7 +180,7 @@ function SpacePin({ x, y, operation, isSelected, onClick, delay }: SpacePinProps
         cy={y}
         r={size}
         fill={isSelected ? "#ffffff" : colors.fill}
-        stroke={isSelected ? "#ffffff" : colors.fill}
+        stroke={isSelected ? "#ffffff" : "rgba(255,255,255,0.3)"}
         strokeWidth={2}
       />
       
@@ -216,26 +188,26 @@ function SpacePin({ x, y, operation, isSelected, onClick, delay }: SpacePinProps
       <circle
         cx={x}
         cy={y}
-        r={size * 0.4}
-        fill={isSelected ? "rgba(255, 255, 255, 0.9)" : "rgba(255, 255, 255, 0.4)"}
+        r={size * 0.35}
+        fill={isSelected ? "rgba(255, 255, 255, 0.9)" : "rgba(255, 255, 255, 0.5)"}
       />
 
-      {/* Label on hover/select - positioned above the pin */}
+      {/* Label - positioned above the pin */}
       {isSelected && (
         <g>
           <rect
-            x={x - (operation.name.length * 7 + 16) / 2}
-            y={y - size - 28}
-            width={operation.name.length * 7 + 16}
-            height={20}
+            x={x - (operation.name.length * 6.5 + 16) / 2}
+            y={y - size - 30}
+            width={operation.name.length * 6.5 + 16}
+            height={22}
             rx={4}
-            fill="rgba(20, 30, 45, 0.95)"
-            stroke="rgba(91, 163, 220, 0.4)"
+            fill="rgba(10, 18, 30, 0.95)"
+            stroke="rgba(91, 163, 220, 0.5)"
             strokeWidth={1}
           />
           <text
             x={x}
-            y={y - size - 17}
+            y={y - size - 18}
             fill="#ffffff"
             fontSize={11}
             fontFamily="var(--font-body)"
@@ -251,42 +223,32 @@ function SpacePin({ x, y, operation, isSelected, onClick, delay }: SpacePinProps
   );
 }
 
-export function SpaceView({
+export function SpaceOverlay({
   isActive,
   selectedOperationId,
   onOperationSelect,
+  onClose,
   mapWidth,
   mapHeight,
-  isMobile,
-}: SpaceViewProps) {
-  const containerRef = useRef<SVGGElement>(null);
+}: SpaceOverlayProps) {
+  const containerRef = useRef<SVGSVGElement>(null);
+  const ringsRef = useRef<SVGGElement>(null);
+  const backdropRef = useRef<SVGRectElement>(null);
   const spaceOperations = useSpaceOperations();
-
-  // Padding from viewport edges
-  const padding = isMobile ? 40 : 60;
   
-  // On mobile, Earth is positioned off the left edge
-  // On desktop, Earth is centered with padding considered
-  const centerX = isMobile 
-    ? -mapWidth * 0.15  // Earth mostly off-screen to the left
-    : mapWidth / 2;
+  // Track if we should render (stays true during exit animation)
+  const [shouldRender, setShouldRender] = useState(false);
+  const isAnimatingRef = useRef(false);
+  const hasAnimatedIn = useRef(false);
+
+  const centerX = mapWidth / 2;
   const centerY = mapHeight / 2;
   
-  // Calculate max available radius based on viewport and padding
-  const maxAvailableRadius = isMobile
-    ? mapWidth - padding - 20  // Account for pins extending beyond ring
-    : Math.min(mapWidth, mapHeight) / 2 - padding - 20;
+  // Calculate ring sizes based on viewport - leave room for padding
+  const padding = 80;
+  const maxRadius = Math.min(mapWidth, mapHeight) / 2 - padding;
+  const minRadius = 60;
   
-  // Base radius for Earth - smaller on mobile since it's partially hidden
-  const earthRadius = isMobile 
-    ? mapHeight * 0.25
-    : Math.min(mapWidth, mapHeight) * 0.12;
-  
-  // Calculate ring radii to fit within available space
-  const ringSpacing = isMobile
-    ? (maxAvailableRadius - earthRadius) / 5.5
-    : (maxAvailableRadius - earthRadius * 1.2) / 5.5;
-
   // Group operations by orbit type
   const operationsByOrbit = useMemo(() => {
     const groups: Record<string, SpaceOperation[]> = {
@@ -307,38 +269,25 @@ export function SpaceView({
     return groups;
   }, [spaceOperations]);
 
-  // Define orbit rings with their radii - scaled to fit with padding
+  // Define orbit rings - evenly spaced from center to edge
+  const activeOrbitTypes = ["LEO", "MEO", "GEO", "HEO", "Lunar"].filter(
+    type => operationsByOrbit[type].length > 0
+  );
+  
+  const ringSpacing = activeOrbitTypes.length > 1 
+    ? (maxRadius - minRadius) / (activeOrbitTypes.length - 1)
+    : 0;
+
   const orbitRings = useMemo(() => {
-    const baseOffset = earthRadius * 1.2;
-    return [
-      { type: "LEO", label: "LEO", radius: baseOffset + ringSpacing * 1, operations: operationsByOrbit.LEO },
-      { type: "MEO", label: "MEO", radius: baseOffset + ringSpacing * 2, operations: operationsByOrbit.MEO },
-      { type: "GEO", label: "GEO", radius: baseOffset + ringSpacing * 3, operations: operationsByOrbit.GEO },
-      { type: "HEO", label: "HEO", radius: baseOffset + ringSpacing * 4, operations: operationsByOrbit.HEO },
-      { type: "Lunar", label: "LUNAR", radius: baseOffset + ringSpacing * 5, operations: operationsByOrbit.Lunar },
-    ].filter(ring => ring.operations.length > 0);
-  }, [earthRadius, ringSpacing, operationsByOrbit]);
+    return activeOrbitTypes.map((type, index) => ({
+      type,
+      label: type === "Lunar" ? "LUNAR" : type,
+      radius: minRadius + ringSpacing * index,
+      operations: operationsByOrbit[type],
+    }));
+  }, [activeOrbitTypes, minRadius, ringSpacing, operationsByOrbit]);
 
-  // On mobile, only show the right half of the orbits (visible arc)
-  // Arc from -80deg to +80deg (roughly the visible portion)
-  const arcStart = isMobile ? -Math.PI * 0.45 : 0;
-  const arcEnd = isMobile ? Math.PI * 0.45 : Math.PI * 2;
-
-  useGSAP(() => {
-    if (!containerRef.current || !isActive) return;
-    
-    gsap.fromTo(
-      containerRef.current,
-      { opacity: 0 },
-      {
-        opacity: 1,
-        duration: motion.duration.base,
-        ease: motion.ease.out,
-      }
-    );
-  }, [isActive]);
-
-  // Generate stable stars (memoized to prevent re-render flicker)
+  // Generate stable stars
   const stars = useMemo(() => {
     const seed = 12345;
     const seededRandom = (i: number) => {
@@ -346,40 +295,116 @@ export function SpaceView({
       return x - Math.floor(x);
     };
     
-    return Array.from({ length: 80 }).map((_, i) => ({
+    return Array.from({ length: 60 }).map((_, i) => ({
       x: seededRandom(i * 3) * mapWidth,
       y: seededRandom(i * 3 + 1) * mapHeight,
-      size: seededRandom(i * 3 + 2) * 1.5 + 0.5,
-      opacity: seededRandom(i * 3 + 3) * 0.4 + 0.1,
+      size: seededRandom(i * 3 + 2) * 1.2 + 0.3,
+      opacity: seededRandom(i * 3 + 3) * 0.3 + 0.05,
     }));
   }, [mapWidth, mapHeight]);
 
-  if (!isActive) return null;
+  // Handle enter animation
+  const animateIn = useCallback(() => {
+    if (!containerRef.current || !ringsRef.current || isAnimatingRef.current || hasAnimatedIn.current) return;
+    
+    isAnimatingRef.current = true;
+    hasAnimatedIn.current = true;
+    
+    const tl = gsap.timeline({
+      onComplete: () => {
+        isAnimatingRef.current = false;
+      },
+    });
+    
+    // Fade in container
+    tl.fromTo(
+      containerRef.current,
+      { opacity: 0 },
+      { opacity: 1, duration: motion.duration.base, ease: motion.ease.out },
+      0
+    );
+    
+    // Animate rings expanding from center
+    tl.fromTo(
+      ringsRef.current,
+      { opacity: 0, scale: 0.5 },
+      { opacity: 1, scale: 1, duration: motion.duration.slow, ease: "power2.out" },
+      0.1
+    );
+  }, []);
+
+  // Handle exit animation
+  const animateOut = useCallback(() => {
+    if (!containerRef.current || !ringsRef.current || isAnimatingRef.current) return;
+    
+    isAnimatingRef.current = true;
+    
+    const tl = gsap.timeline({
+      onComplete: () => {
+        setShouldRender(false);
+        isAnimatingRef.current = false;
+        hasAnimatedIn.current = false;
+      },
+    });
+    
+    // Animate rings collapsing to center
+    tl.to(
+      ringsRef.current,
+      { opacity: 0, scale: 0.6, duration: motion.duration.base, ease: "power2.in" },
+      0
+    );
+    
+    // Fade out container
+    tl.to(
+      containerRef.current,
+      { opacity: 0, duration: motion.duration.base, ease: motion.ease.in },
+      0.05
+    );
+  }, []);
+
+  // Handle isActive changes
+  useEffect(() => {
+    if (isActive && !shouldRender) {
+      // Opening - mount first, then animate
+      setShouldRender(true);
+    } else if (!isActive && shouldRender && !isAnimatingRef.current) {
+      // Closing - animate out, then unmount
+      animateOut();
+    }
+  }, [isActive, shouldRender, animateOut]);
+
+  // Trigger enter animation after mount
+  useEffect(() => {
+    if (shouldRender && isActive && !hasAnimatedIn.current) {
+      // Small delay to ensure DOM is ready
+      const timer = setTimeout(animateIn, 10);
+      return () => clearTimeout(timer);
+    }
+  }, [shouldRender, isActive, animateIn]);
+
+  if (!shouldRender) return null;
 
   return (
-    <g ref={containerRef}>
-      {/* Defs for gradients */}
-      <defs>
-        <radialGradient id="earthGradient" cx="40%" cy="40%">
-          <stop offset="0%" stopColor="#2d5a87" />
-          <stop offset="50%" stopColor="#1a3a5c" />
-          <stop offset="100%" stopColor="#0e2240" />
-        </radialGradient>
-        <radialGradient id="earthGlow" cx="50%" cy="50%">
-          <stop offset="0%" stopColor="rgba(91, 163, 220, 0.4)" />
-          <stop offset="70%" stopColor="rgba(91, 163, 220, 0.1)" />
-          <stop offset="100%" stopColor="rgba(91, 163, 220, 0)" />
-        </radialGradient>
-        {/* Vignette gradient for edges */}
-        <radialGradient id="spaceVignette" cx="50%" cy="50%">
-          <stop offset="0%" stopColor="rgba(10, 18, 30, 0)" />
-          <stop offset="60%" stopColor="rgba(10, 18, 30, 0)" />
-          <stop offset="85%" stopColor="rgba(10, 18, 30, 0.4)" />
-          <stop offset="100%" stopColor="rgba(10, 18, 30, 0.9)" />
-        </radialGradient>
-      </defs>
+    <svg 
+      ref={containerRef}
+      width={mapWidth} 
+      height={mapHeight} 
+      className="absolute inset-0 z-20"
+      style={{ pointerEvents: "none" }}
+    >
+      {/* Dark overlay to dim the map */}
+      <rect
+        ref={backdropRef}
+        x={0}
+        y={0}
+        width={mapWidth}
+        height={mapHeight}
+        fill="rgba(5, 10, 18, 0.75)"
+        style={{ pointerEvents: "all" }}
+        onClick={onClose}
+      />
 
-      {/* Stars background effect - rendered first (behind everything) */}
+      {/* Subtle stars */}
       {stars.map((star, i) => (
         <circle
           key={i}
@@ -389,78 +414,150 @@ export function SpaceView({
           fill={`rgba(255, 255, 255, ${star.opacity})`}
         />
       ))}
-      
-      {/* Earth glow */}
-      <circle
-        cx={centerX}
-        cy={centerY}
-        r={earthRadius * 1.8}
-        fill="url(#earthGlow)"
-      />
-      
-      {/* Earth */}
-      <circle
-        cx={centerX}
-        cy={centerY}
-        r={earthRadius}
-        fill="url(#earthGradient)"
-        stroke="rgba(91, 163, 220, 0.4)"
-        strokeWidth={1.5}
-      />
-      
-      {/* Earth atmosphere rim */}
-      <circle
-        cx={centerX}
-        cy={centerY}
-        r={earthRadius + 3}
-        fill="none"
-        stroke="rgba(91, 163, 220, 0.2)"
-        strokeWidth={6}
-        style={{ filter: "blur(3px)" }}
-      />
-      
-      {/* Earth label - only on desktop */}
-      {!isMobile && (
-        <text
-          x={centerX}
-          y={centerY + earthRadius + 24}
-          fill="rgba(255, 255, 255, 0.5)"
-          fontSize={10}
-          fontFamily="var(--font-body)"
-          textAnchor="middle"
-          className="uppercase tracking-widest"
-        >
-          Earth
-        </text>
-      )}
 
-      {/* Orbit rings with operations */}
-      {orbitRings.map((ring, index) => (
-        <OrbitRing
-          key={ring.type}
-          operations={ring.operations}
-          radius={ring.radius}
-          label={ring.label}
-          centerX={centerX}
-          centerY={centerY}
-          selectedId={selectedOperationId}
-          onSelect={onOperationSelect}
-          delay={0.1 + index * 0.1}
-          isMobile={isMobile}
-          arcStart={arcStart}
-          arcEnd={arcEnd}
-        />
-      ))}
-
-      {/* Edge vignette overlay */}
+      {/* Scan line effect */}
+      <defs>
+        <linearGradient id="scanGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="rgba(91, 163, 220, 0)" />
+          <stop offset="50%" stopColor="rgba(91, 163, 220, 0.08)" />
+          <stop offset="100%" stopColor="rgba(91, 163, 220, 0)" />
+        </linearGradient>
+      </defs>
       <rect
         x={0}
         y={0}
         width={mapWidth}
         height={mapHeight}
-        fill="url(#spaceVignette)"
-        pointerEvents="none"
+        fill="url(#scanGradient)"
+        className="animate-scan"
+        style={{ pointerEvents: "none" }}
       />
-    </g>
+
+      {/* Center crosshair / reference point */}
+      <g opacity={0.3}>
+        <line
+          x1={centerX - 20}
+          y1={centerY}
+          x2={centerX + 20}
+          y2={centerY}
+          stroke="rgba(91, 163, 220, 0.5)"
+          strokeWidth={1}
+        />
+        <line
+          x1={centerX}
+          y1={centerY - 20}
+          x2={centerX}
+          y2={centerY + 20}
+          stroke="rgba(91, 163, 220, 0.5)"
+          strokeWidth={1}
+        />
+        <circle
+          cx={centerX}
+          cy={centerY}
+          r={8}
+          fill="none"
+          stroke="rgba(91, 163, 220, 0.4)"
+          strokeWidth={1}
+        />
+      </g>
+
+      {/* Orbit rings with operations */}
+      <g ref={ringsRef} style={{ transformOrigin: `${centerX}px ${centerY}px` }}>
+        {orbitRings.map((ring, index) => (
+          <OrbitRing
+            key={ring.type}
+            operations={ring.operations}
+            radius={ring.radius}
+            label={ring.label}
+            centerX={centerX}
+            centerY={centerY}
+            selectedId={selectedOperationId}
+            onSelect={onOperationSelect}
+            delay={0.15 + index * 0.08}
+          />
+        ))}
+      </g>
+    </svg>
+  );
+}
+
+// Trigger component - the pull-down strip at the top
+interface SpaceTriggerProps {
+  isActive: boolean;
+  onToggle: () => void;
+  operationCount: number;
+}
+
+export function SpaceTrigger({ isActive, onToggle, operationCount }: SpaceTriggerProps) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  return (
+    <button
+      ref={triggerRef}
+      onClick={onToggle}
+      className={`
+        absolute top-0 left-1/2 -translate-x-1/2 z-40
+        flex items-center gap-2 px-4 py-2 pt-3
+        rounded-b-xl border border-t-0
+        transition-all duration-300 ease-out
+        ${isActive 
+          ? 'bg-primary/30 border-primary/50 text-white' 
+          : 'bg-[#141e2d]/80 border-primary/30 text-white/80 hover:bg-[#1c2a3d]/90 hover:border-primary/50 hover:text-white'
+        }
+      `}
+      aria-label={isActive ? "Close space operations" : "Open space operations"}
+      aria-expanded={isActive}
+    >
+      {/* Satellite icon */}
+      <svg 
+        width="16" 
+        height="16" 
+        viewBox="0 0 24 24" 
+        fill="none" 
+        stroke="currentColor" 
+        strokeWidth="1.5" 
+        strokeLinecap="round" 
+        strokeLinejoin="round"
+        className={`transition-transform duration-300 ${isActive ? 'rotate-180' : ''}`}
+      >
+        <path d="M13 7L9 3L5 7l4 4" />
+        <path d="m17 11 4 4-4 4-4-4" />
+        <path d="m8 12 4 4 6-6-4-4-6 6" />
+        <path d="m16 8 3-3" />
+        <path d="M9 21a6 6 0 0 0-6-6" />
+      </svg>
+      
+      <span className="text-xs uppercase tracking-[0.15em] font-medium">
+        Space Ops
+      </span>
+      
+      {/* Count badge */}
+      <span className={`
+        min-w-[18px] h-[18px] px-1 
+        flex items-center justify-center 
+        rounded-full text-[10px] font-semibold
+        ${isActive 
+          ? 'bg-white/20 text-white' 
+          : 'bg-primary/40 text-white/90'
+        }
+      `}>
+        {operationCount}
+      </span>
+      
+      {/* Pull indicator arrow */}
+      <svg 
+        width="10" 
+        height="10" 
+        viewBox="0 0 24 24" 
+        fill="none" 
+        stroke="currentColor" 
+        strokeWidth="2" 
+        strokeLinecap="round" 
+        strokeLinejoin="round"
+        className={`transition-transform duration-300 ${isActive ? 'rotate-180' : ''}`}
+      >
+        <polyline points="6 9 12 15 18 9" />
+      </svg>
+    </button>
   );
 }
