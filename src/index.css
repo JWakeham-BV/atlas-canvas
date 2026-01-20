@@ -88,7 +88,13 @@
   }
 
   .map-vignette {
-    background: radial-gradient(circle at 50% 50%, rgba(10, 18, 30, 0), rgba(10, 18, 30, 0.85));
+    background: radial-gradient(circle at 50% 50%, rgba(10, 18, 30, 0), rgba(10, 18, 30, 0.5));
+  }
+
+  @media (max-width: 639px) {
+    .map-vignette {
+      background: radial-gradient(circle at 50% 50%, rgba(10, 18, 30, 0), rgba(10, 18, 30, 0.35));
+    }
   }
 
   .map-noise {

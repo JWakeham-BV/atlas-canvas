@@ -48,18 +48,34 @@ export function MapControl({
     () => new Map(locations.map((loc) => [loc.id, loc])),
     [locations]
   );
-  const defaultPosition = useMemo(
-    () => ({
-      coordinates: [0, 20] as [number, number],
-      zoom: 1.2,
-    }),
-    []
-  );
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<HTMLDivElement>(null);
   const mapSize = useMapSize(containerRef);
   const mapWidth = mapSize.width || 800;
   const mapHeight = mapSize.height || 450;
+  
+  // Calculate minimum zoom to ensure the full map fits in the viewport
+  // The base projection scale is 140, which at zoom 1 fits well in ~800px width
+  // For narrower viewports, we need to allow zooming out further
+  const minZoom = useMemo(() => {
+    // Mercator projection at scale 140 shows roughly 360 degrees of longitude
+    // across ~800px. We need to calculate how much zoom is needed to fit
+    // the full world width in the current viewport.
+    const baseWidth = 800;
+    const calculatedMin = Math.min(1, mapWidth / baseWidth);
+    // Ensure we don't go below a reasonable minimum
+    return Math.max(0.3, calculatedMin);
+  }, [mapWidth]);
+
+  const defaultPosition = useMemo(
+    () => ({
+      coordinates: [0, 20] as [number, number],
+      // Scale default zoom proportionally to viewport width
+      // Base: 1.2 zoom at 800px width
+      zoom: Math.max(minZoom, (mapWidth / 800) * 1.2),
+    }),
+    [minZoom, mapWidth]
+  );
   const {
     position,
     positionRef,
@@ -234,10 +250,10 @@ export function MapControl({
   };
 
   const handleZoomOut = () => {
-    if (positionRef.current.zoom <= 1) return;
+    if (positionRef.current.zoom <= minZoom) return;
     animatePosition({
       coordinates: [positionRef.current.x, positionRef.current.y],
-      zoom: positionRef.current.zoom / 1.5,
+      zoom: Math.max(minZoom, positionRef.current.zoom / 1.5),
     });
   };
 
@@ -357,10 +373,10 @@ export function MapControl({
             onMove={handleMove}
             onMoveEnd={handleMoveEnd}
             maxZoom={10}
-            minZoom={1}
+            minZoom={minZoom}
             translateExtent={[
-              [0, 0],
-              [mapWidth, mapHeight],
+              [-mapWidth * (1 - minZoom), -mapHeight * (1 - minZoom)],
+              [mapWidth * (2 - minZoom), mapHeight * (2 - minZoom)],
             ]}
           >
             <Graticule
