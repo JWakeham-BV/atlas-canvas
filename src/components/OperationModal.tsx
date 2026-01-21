@@ -1,6 +1,6 @@
-import { motion } from "@/lib/motion";
 import type { ExpandedContent, Location } from "@shared/data";
 import { useGSAP } from "@gsap/react";
+import { FocusTrap } from "focus-trap-react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import {
@@ -25,7 +25,6 @@ interface OperationModalProps {
   content: ExpandedContent;
   isOpen: boolean;
   onClose: () => void;
-  sourceRect: DOMRect | null;
 }
 
 export function OperationModal({
@@ -33,11 +32,8 @@ export function OperationModal({
   content,
   isOpen,
   onClose,
-  sourceRect,
 }: OperationModalProps) {
-  const backdropRef = useRef<HTMLDivElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
   const heroRef = useRef<HTMLElement>(null);
@@ -60,86 +56,25 @@ export function OperationModal({
     [onClose]
   );
 
-  // Focus trap: keep focus within the modal when open
-  const handleTabKey = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key !== "Tab" || !modalRef.current) return;
-
-      const selector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-      const focusableElements = Array.from(
-        modalRef.current.querySelectorAll<HTMLElement>(selector)
-      ).filter((el) => !el.hasAttribute("disabled") && el.offsetParent !== null);
-
-      if (focusableElements.length === 0) return;
-
-      const firstElement = focusableElements[0];
-      const lastElement = focusableElements[focusableElements.length - 1];
-
-      if (e.shiftKey) {
-        if (document.activeElement === firstElement) {
-          e.preventDefault();
-          lastElement.focus();
-        }
-      } else {
-        if (document.activeElement === lastElement) {
-          e.preventDefault();
-          firstElement.focus();
-        }
-      }
-    },
-    []
-  );
-
-  const handleBackdropClick = useCallback(
-    (e: React.MouseEvent) => {
-      if (e.target === backdropRef.current) onClose();
-    },
-    [onClose]
-  );
-
-  // Store previously focused element to restore on close
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   // Main entrance/exit animation
   useEffect(() => {
     if (isOpen) {
-      // Store the currently focused element
-      previouslyFocusedRef.current = document.activeElement as HTMLElement;
-      
       setIsVisible(true);
       setAnimationComplete(false);
-      document.addEventListener("keydown", handleEscape);
-      document.addEventListener("keydown", handleTabKey);
       document.body.style.overflow = "hidden";
-      
-      // Focus the close button after animation starts
-      setTimeout(() => {
-        closeButtonRef.current?.focus();
-      }, 100);
+      document.addEventListener("keydown", handleEscape);
 
       const tl = gsap.timeline({
         onComplete: () => setAnimationComplete(true),
       });
 
-      // Dramatic backdrop entrance with blur ramp
-      tl.fromTo(
-        backdropRef.current,
-        { opacity: 0 },
-        { opacity: 1, duration: 0.6, ease: "power2.out" }
-      );
-
-      // Simple fade in and up from center
+      // Modal fade in
       tl.fromTo(
         modalRef.current,
-        { opacity: 0, y: 40 },
-        {
-          opacity: 1,
-          y: 0,
-          duration: 0.6,
-          ease: "power2.out",
-        },
-        0.1
+        { opacity: 0 },
+        { opacity: 1, duration: 0.4, ease: "power2.out" }
       );
 
       // Header slides down with bounce
@@ -191,10 +126,6 @@ export function OperationModal({
         0.9
       );
 
-      return () => {
-        document.removeEventListener("keydown", handleEscape);
-        document.removeEventListener("keydown", handleTabKey);
-      };
     } else if (isVisible) {
       // Exit animation
       const tl = gsap.timeline({
@@ -204,45 +135,28 @@ export function OperationModal({
           document.body.style.overflow = "";
           // Kill all ScrollTriggers for this modal
           ScrollTrigger.getAll().forEach((st) => st.kill());
-          // Restore focus to previously focused element
-          previouslyFocusedRef.current?.focus();
         },
       });
 
       // Quick content fade
-      tl.to(contentRef.current, {
+      tl.to(modalRef.current, {
         opacity: 0,
-        y: -30,
         duration: 0.3,
         ease: "power2.in",
       });
-
-      // Simple fade out and down
-      tl.to(
-        modalRef.current,
-        {
-          opacity: 0,
-          y: 40,
-          duration: 0.4,
-          ease: "power2.in",
-        },
-        0.15
-      );
-
-      tl.to(
-        backdropRef.current,
-        { opacity: 0, duration: 0.3, ease: "power2.in" },
-        0.2
-      );
     }
-  }, [isOpen, isVisible, handleEscape, handleTabKey, sourceRect]);
+
+    return () => {
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isOpen, isVisible, handleEscape]);
 
   // Scroll-triggered animations
   useGSAP(
     () => {
-      if (!animationComplete || !scrollContainerRef.current) return;
+      if (!animationComplete || !modalRef.current) return;
 
-      const scroller = scrollContainerRef.current;
+      const scroller = modalRef.current;
 
       // Overview section - fade up with text reveal
       if (overviewRef.current) {
@@ -461,7 +375,7 @@ export function OperationModal({
             scrollTrigger: {
               trigger: footerRef.current,
               scroller,
-              start: "top 90%",
+              start: "top 90%", 
               toggleActions: "play none none reverse",
             },
           }
@@ -489,14 +403,14 @@ export function OperationModal({
   if (!isVisible && !isOpen) return null;
 
   const modalContent = (
-    <div
-      ref={backdropRef}
-      className="fixed inset-0 z-[100]"
-      onClick={handleBackdropClick}
-      style={{
-        backgroundColor: "rgba(10, 18, 30, 0.6)",
-        backdropFilter: "blur(12px)",
-        opacity: 0,
+    <FocusTrap
+      active={isVisible}
+      focusTrapOptions={{
+        initialFocus: () => closeButtonRef.current,
+        escapeDeactivates: true,
+        clickOutsideDeactivates: true,
+        allowOutsideClick: true,
+        returnFocusOnDeactivate: true,
       }}
     >
       <div
@@ -504,19 +418,16 @@ export function OperationModal({
         role="dialog"
         aria-modal="true"
         aria-label={`Operation details for ${location.name}`}
-        className="relative w-full h-full bg-gradient-to-br from-[#141e2d]/95 via-[#111a28]/95 to-[#0e1621]/95 overflow-hidden"
-        style={{ opacity: 0, transform: "translateY(40px)" }}
+        className="fixed inset-0 z-[100] bg-gradient-to-br from-[#141e2d]/95 via-[#111a28]/95 to-[#0e1621]/95 overflow-y-auto"
+        style={{ 
+          backdropFilter: "blur(12px)",
+          opacity: 0,
+        }}
       >
-        {/* Decorative gradients */}
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-accent/5 opacity-80 pointer-events-none" />
-        <div className="absolute top-0 left-0 right-0 h-60 bg-gradient-to-b from-primary/5 to-transparent pointer-events-none" />
-        <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-[#0e1621] to-transparent pointer-events-none z-10" />
-
         {/* Header */}
         <div
           ref={headerRef}
-          className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-6 md:px-10 lg:px-16 py-6 bg-gradient-to-b from-[#0e1621]/90 via-[#0e1621]/50 to-transparent"
-          style={{ opacity: 0, transform: "translateY(-60px)" }}
+          className="sticky top-0 z-20 flex items-center justify-between px-6 md:px-10 lg:px-16 py-6 bg-gradient-to-b from-[#0e1621]/90 via-[#0e1621]/50 to-transparent"
         >
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 text-xs uppercase tracking-[0.3em] text-primary font-medium">
@@ -538,12 +449,8 @@ export function OperationModal({
           </button>
         </div>
 
-        {/* Scrollable content */}
-        <div
-          ref={scrollContainerRef}
-          className="relative z-10 h-full overflow-y-auto pt-24 pb-16 px-6 md:px-10 lg:px-16"
-        >
-          <div ref={contentRef} className="max-w-7xl mx-auto space-y-16">
+        {/* Content */}
+        <div ref={contentRef} className="max-w-7xl mx-auto space-y-16 px-6 md:px-10 lg:px-16 pb-16">
             {/* Hero Section */}
             <section
               ref={heroRef}
@@ -790,8 +697,7 @@ export function OperationModal({
             </section>
           </div>
         </div>
-      </div>
-    </div>
+    </FocusTrap>
   );
 
   return createPortal(modalContent, document.body);

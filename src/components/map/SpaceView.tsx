@@ -1,6 +1,6 @@
 import { useSpaceOperations } from "@/hooks/use-locations";
-import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { motion } from "@/lib/motion";
+import { FocusTrap } from "focus-trap-react";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 import { useRef, useMemo, useState, useEffect, useCallback } from "react";
@@ -260,13 +260,7 @@ export function SpaceOverlay({
   const isAnimatingRef = useRef(false);
   const hasAnimatedIn = useRef(false);
   
-  // Focus trap using the reusable hook
-  const focusTrapRef = useFocusTrap<HTMLDivElement>({
-    isActive: isActive && shouldRender,
-    onEscape: onClose,
-    autoFocusDelay: 300,
-    restoreFocus: true,
-  });
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Desktop: center in middle of viewport for full circles
   const centerX = mapWidth / 2;
@@ -374,7 +368,6 @@ export function SpaceOverlay({
         setShouldRender(false);
         isAnimatingRef.current = false;
         hasAnimatedIn.current = false;
-        // Focus restoration is handled by useFocusTrap
       },
     });
     
@@ -420,11 +413,82 @@ export function SpaceOverlay({
   // Mobile: Vertical list layout
   if (isMobile) {
     return (
+      <FocusTrap
+        active={isActive && shouldRender}
+        focusTrapOptions={{
+          escapeDeactivates: true,
+          clickOutsideDeactivates: true,
+          allowOutsideClick: true,
+          returnFocusOnDeactivate: true,
+        }}
+      >
+        <div 
+          ref={containerRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Space operations overlay with ${spaceOperations.length} satellites`}
+          className="absolute inset-0 z-20"
+          style={{ pointerEvents: "none" }}
+        >
+          {/* Trigger button inside focus trap */}
+          <SpaceTriggerButton
+            isActive={true}
+            onToggle={onClose}
+            operationCount={spaceOperations.length}
+          />
+          
+          <div 
+            ref={animationContainerRef}
+            className="absolute inset-0 flex flex-col"
+            style={{ pointerEvents: "none" }}
+          >
+            {/* Dark overlay backdrop */}
+            <div 
+              className="absolute inset-0 bg-[#050a12]/85"
+              style={{ pointerEvents: "all" }}
+              onClick={onClose}
+            />
+            
+            {/* Scrollable list */}
+            <div 
+              className="relative flex-1 overflow-y-auto pt-16 pb-24 px-4"
+              style={{ pointerEvents: "all" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="space-y-3">
+                {spaceOperations.map((op, index) => (
+                  <MobileSpaceCard
+                    key={op.id}
+                    operation={op}
+                    isSelected={selectedOperationId === op.id}
+                    onClick={() => onOperationSelect(op.id)}
+                    delay={0.05 + index * 0.03}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </FocusTrap>
+    );
+  }
+
+  // Desktop: Orbital rings view
+  return (
+    <FocusTrap
+      active={isActive && shouldRender}
+      focusTrapOptions={{
+        escapeDeactivates: true,
+        clickOutsideDeactivates: true,
+        allowOutsideClick: true,
+        returnFocusOnDeactivate: true,
+      }}
+    >
       <div 
-        ref={focusTrapRef}
+        ref={containerRef}
         role="dialog"
         aria-modal="true"
-        aria-label={`Space operations overlay with ${spaceOperations.length} satellites`}
+        aria-label={`Space operations orbital view with ${spaceOperations.length} satellites. Press Escape to close.`}
         className="absolute inset-0 z-20"
         style={{ pointerEvents: "none" }}
       >
@@ -435,134 +499,83 @@ export function SpaceOverlay({
           operationCount={spaceOperations.length}
         />
         
-        <div 
-          ref={animationContainerRef}
-          className="absolute inset-0 flex flex-col"
-          style={{ pointerEvents: "none" }}
-        >
-          {/* Dark overlay backdrop */}
-          <div 
-            className="absolute inset-0 bg-[#050a12]/85"
+        <div ref={animationContainerRef} className="absolute inset-0" style={{ pointerEvents: "none" }}>
+          <svg 
+            ref={svgContainerRef}
+            width={mapWidth} 
+            height={mapHeight} 
+            className="absolute inset-0"
+          >
+          {/* Dark overlay to dim the map */}
+          <rect
+            x={0}
+            y={0}
+            width={mapWidth}
+            height={mapHeight}
+            fill="rgba(5, 10, 18, 0.75)"
             style={{ pointerEvents: "all" }}
             onClick={onClose}
           />
-          
-          {/* Scrollable list */}
-          <div 
-            className="relative flex-1 overflow-y-auto pt-16 pb-24 px-4"
-            style={{ pointerEvents: "all" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="space-y-3">
-              {spaceOperations.map((op, index) => (
-                <MobileSpaceCard
-                  key={op.id}
-                  operation={op}
-                  isSelected={selectedOperationId === op.id}
-                  onClick={() => onOperationSelect(op.id)}
-                  delay={0.05 + index * 0.03}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
-  // Desktop: Orbital rings view
-  return (
-    <div 
-      ref={focusTrapRef}
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Space operations orbital view with ${spaceOperations.length} satellites. Press Escape to close.`}
-      className="absolute inset-0 z-20"
-      style={{ pointerEvents: "none" }}
-    >
-      {/* Trigger button inside focus trap */}
-      <SpaceTriggerButton
-        isActive={true}
-        onToggle={onClose}
-        operationCount={spaceOperations.length}
-      />
-      
-      <div ref={animationContainerRef} className="absolute inset-0" style={{ pointerEvents: "none" }}>
-        <svg 
-          ref={svgContainerRef}
-          width={mapWidth} 
-          height={mapHeight} 
-          className="absolute inset-0"
-        >
-        {/* Dark overlay to dim the map */}
-        <rect
-          x={0}
-          y={0}
-          width={mapWidth}
-          height={mapHeight}
-          fill="rgba(5, 10, 18, 0.75)"
-          style={{ pointerEvents: "all" }}
-          onClick={onClose}
-        />
-
-        {/* Subtle stars */}
-        {stars.map((star, i) => (
-          <circle
-            key={i}
-            cx={star.x}
-            cy={star.y}
-            r={star.size}
-            fill={`rgba(255, 255, 255, ${star.opacity})`}
-          />
-        ))}
-
-        {/* Center crosshair / reference point */}
-        <g opacity={0.3}>
-          <line
-            x1={centerX - 20}
-            y1={centerY}
-            x2={centerX + 20}
-            y2={centerY}
-            stroke="rgba(91, 163, 220, 0.5)"
-            strokeWidth={1}
-          />
-          <line
-            x1={centerX}
-            y1={centerY - 20}
-            x2={centerX}
-            y2={centerY + 20}
-            stroke="rgba(91, 163, 220, 0.5)"
-            strokeWidth={1}
-          />
-          <circle
-            cx={centerX}
-            cy={centerY}
-            r={8}
-            fill="none"
-            stroke="rgba(91, 163, 220, 0.4)"
-            strokeWidth={1}
-          />
-        </g>
-
-        {/* Orbit rings with operations */}
-        <g ref={ringsRef} style={{ transformOrigin: `${centerX}px ${centerY}px` }}>
-          {orbitRings.map((ring, index) => (
-            <OrbitRing
-              key={ring.type}
-              operations={ring.operations}
-              radius={ring.radius}
-              label={ring.label}
-              centerX={centerX}
-              centerY={centerY}
-              selectedId={selectedOperationId}
-              onSelect={onOperationSelect}
-              delay={0.15 + index * 0.08}
+          {/* Subtle stars */}
+          {stars.map((star, i) => (
+            <circle
+              key={i}
+              cx={star.x}
+              cy={star.y}
+              r={star.size}
+              fill={`rgba(255, 255, 255, ${star.opacity})`}
             />
           ))}
-        </g>
-        </svg>
+
+          {/* Center crosshair / reference point */}
+          <g opacity={0.3}>
+            <line
+              x1={centerX - 20}
+              y1={centerY}
+              x2={centerX + 20}
+              y2={centerY}
+              stroke="rgba(91, 163, 220, 0.5)"
+              strokeWidth={1}
+            />
+            <line
+              x1={centerX}
+              y1={centerY - 20}
+              x2={centerX}
+              y2={centerY + 20}
+              stroke="rgba(91, 163, 220, 0.5)"
+              strokeWidth={1}
+            />
+            <circle
+              cx={centerX}
+              cy={centerY}
+              r={8}
+              fill="none"
+              stroke="rgba(91, 163, 220, 0.4)"
+              strokeWidth={1}
+            />
+          </g>
+
+          {/* Orbit rings with operations */}
+          <g ref={ringsRef} style={{ transformOrigin: `${centerX}px ${centerY}px` }}>
+            {orbitRings.map((ring, index) => (
+              <OrbitRing
+                key={ring.type}
+                operations={ring.operations}
+                radius={ring.radius}
+                label={ring.label}
+                centerX={centerX}
+                centerY={centerY}
+                selectedId={selectedOperationId}
+                onSelect={onOperationSelect}
+                delay={0.15 + index * 0.08}
+              />
+            ))}
+          </g>
+          </svg>
+        </div>
       </div>
-    </div>
+    </FocusTrap>
   );
 }
 

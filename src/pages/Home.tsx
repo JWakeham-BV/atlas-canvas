@@ -21,6 +21,10 @@ export default function Home() {
 
   // Focus the appropriate drawer when a selection is made
   const handleLocationSelect = useCallback((id: number | null) => {
+    // Store the trigger element immediately (before any async operations)
+    if (id !== null) {
+      infoDrawerRef.current?.storeTriggerElement();
+    }
     setSelectedLocationId(id);
     if (id !== null) {
       // Small delay to allow drawer to animate in
@@ -31,6 +35,10 @@ export default function Home() {
   }, []);
 
   const handleSpaceOperationSelect = useCallback((id: number | null) => {
+    // Store the trigger element immediately (before any async operations)
+    if (id !== null) {
+      spaceInfoDrawerRef.current?.storeTriggerElement();
+    }
     setSelectedSpaceOperationId(id);
     if (id !== null) {
       setTimeout(() => {

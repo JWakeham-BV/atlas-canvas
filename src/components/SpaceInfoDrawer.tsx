@@ -1,6 +1,6 @@
 import { useSpaceOperation } from "@/hooks/use-locations";
-import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { motion } from "@/lib/motion";
+import { FocusTrap } from "focus-trap-react";
 import gsap from "gsap";
 import { Satellite, X } from "lucide-react";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
@@ -13,6 +13,7 @@ interface SpaceInfoDrawerProps {
 
 export interface SpaceInfoDrawerHandle {
   focus: () => void;
+  storeTriggerElement: () => void;
 }
 
 export const SpaceInfoDrawer = forwardRef<SpaceInfoDrawerHandle, SpaceInfoDrawerProps>(function SpaceInfoDrawer({ operationId, onClose }, ref) {
@@ -21,7 +22,6 @@ export const SpaceInfoDrawer = forwardRef<SpaceInfoDrawerHandle, SpaceInfoDrawer
   );
   const [isOpen, setIsOpen] = useState(Boolean(operationId));
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalSourceRect, setModalSourceRect] = useState<DOMRect | null>(null);
   const operation = useSpaceOperation(displayedOperationId);
 
   const panelRef = useRef<HTMLDivElement>(null);
@@ -34,28 +34,20 @@ export const SpaceInfoDrawer = forwardRef<SpaceInfoDrawerHandle, SpaceInfoDrawer
   // Track the element that was focused before the drawer opened (the pin)
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
-  // Focus trap using the reusable hook
-  useFocusTrap({
-    isActive: isOpen,
-    onEscape: onClose,
-    autoFocusDelay: 0, // We handle focus manually via the imperative handle
-    restoreFocus: false, // We restore focus manually to the pin
-    containerRef: panelRef,
-  });
+  // Store the element that triggered the drawer open (called immediately on selection)
+  const storeTriggerElement = useCallback(() => {
+    previouslyFocusedRef.current = document.activeElement as HTMLElement;
+  }, []);
 
-  // Expose focus method to parent (called when a space pin is selected)
+  // Expose methods to parent
   useImperativeHandle(ref, () => ({
     focus: () => {
-      // Store the currently focused element (the pin) before moving focus
-      previouslyFocusedRef.current = document.activeElement as HTMLElement;
       closeButtonRef.current?.focus();
     },
+    storeTriggerElement,
   }));
 
   const handleOpenOperation = useCallback(() => {
-    if (panelRef.current) {
-      setModalSourceRect(panelRef.current.getBoundingClientRect());
-    }
     setIsModalOpen(true);
   }, []);
 
@@ -137,9 +129,6 @@ export const SpaceInfoDrawer = forwardRef<SpaceInfoDrawerHandle, SpaceInfoDrawer
           animatePanelOut(() => {
             setDisplayedOperationId(null);
             setIsOpen(false);
-            // Restore focus to the element that opened the drawer (the pin)
-            previouslyFocusedRef.current?.focus();
-            previouslyFocusedRef.current = null;
           });
         });
       }
@@ -190,17 +179,39 @@ export const SpaceInfoDrawer = forwardRef<SpaceInfoDrawerHandle, SpaceInfoDrawer
   const categoryColor = operation ? categoryColors[operation.category] || "text-primary" : "text-primary";
 
   return (
-    <div
-      ref={panelRef}
-      role="dialog"
-      aria-modal="true"
-      aria-label={operation ? `Details for ${operation.name}` : "Space Operation Details"}
-      className={`fixed inset-4 sm:top-1/2 sm:-translate-y-1/2 z-50 w-[calc(100%-2rem)] max-w-[480px] sm:left-auto sm:right-6 sm:top-24 sm:bottom-auto sm:w-[360px] sm:translate-y-0 transition-opacity ${
-        isOpen
-          ? "pointer-events-auto opacity-100 translate-x-0"
-          : "pointer-events-none opacity-0 translate-x-8"
-      }`}
+    <FocusTrap
+      active={isOpen}
+      focusTrapOptions={{
+        escapeDeactivates: false,
+        clickOutsideDeactivates: false,
+        allowOutsideClick: true,
+        returnFocusOnDeactivate: false,
+        onDeactivate: () => {
+          // Restore focus to the element that opened the drawer (the pin)
+          setTimeout(() => {
+            previouslyFocusedRef.current?.focus();
+            previouslyFocusedRef.current = null;
+          }, 0);
+        },
+      }}
     >
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={operation ? `Details for ${operation.name}` : "Space Operation Details"}
+        className={`fixed inset-4 sm:top-1/2 sm:-translate-y-1/2 z-50 w-[calc(100%-2rem)] max-w-[480px] sm:left-auto sm:right-6 sm:top-24 sm:bottom-auto sm:w-[360px] sm:translate-y-0 transition-opacity ${
+          isOpen
+            ? "pointer-events-auto opacity-100 translate-x-0"
+            : "pointer-events-none opacity-0 translate-x-8"
+        }`}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            onClose();
+          }
+        }}
+      >
       <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-[#141e2d] via-[#111a28] to-[#0e1621] border border-primary/30 shadow-2xl" />
       <div className="absolute -inset-px rounded-3xl bg-gradient-to-br from-primary/20 via-transparent to-transparent opacity-80 pointer-events-none" />
 
@@ -310,10 +321,10 @@ export const SpaceInfoDrawer = forwardRef<SpaceInfoDrawerHandle, SpaceInfoDrawer
           content={operation.expandedContent}
           isOpen={isModalOpen}
           onClose={handleCloseModal}
-          sourceRect={modalSourceRect}
         />
       )}
-    </div>
+      </div>
+    </FocusTrap>
   );
 });
 
