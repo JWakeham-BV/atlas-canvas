@@ -427,7 +427,7 @@ export function MapControl({
             center={position.coordinates}
             onMove={handleMove}
             onMoveEnd={handleMoveEnd}
-            maxZoom={10}
+            maxZoom={15}
             minZoom={minZoom}
             translateExtent={[
               [-mapWidth * (1 - minZoom), -mapHeight * (1 - minZoom)],
