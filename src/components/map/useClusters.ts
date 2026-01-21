@@ -21,6 +21,23 @@ export type ClusterItem = {
   };
 };
 
+/**
+ * Sort items by reading order (top-to-bottom, left-to-right).
+ * Groups items into latitude bands (~10 degrees) so nearby items
+ * on the same "row" are navigated left-to-right before moving down.
+ */
+function sortByReadingOrder<T extends { lat: number; lng: number }>(
+  items: T[]
+): T[] {
+  return [...items].sort((a, b) => {
+    // Group by latitude bands (higher lat = north = top of screen in Mercator)
+    const latBandA = Math.floor(a.lat / 10);
+    const latBandB = Math.floor(b.lat / 10);
+    if (latBandB !== latBandA) return latBandB - latBandA; // Top to bottom
+    return a.lng - b.lng; // Left to right within band
+  });
+}
+
 export function useClusters(
   locations: Location[],
   zoom: number,
@@ -47,10 +64,21 @@ export function useClusters(
     return index;
   }, [locations]);
 
-  const clusters = useMemo(
-    () => clusterIndex.getClusters(bounds, Math.round(zoom)) as ClusterItem[],
-    [bounds, clusterIndex, zoom]
-  );
+  const clusters = useMemo(() => {
+    const rawClusters = clusterIndex.getClusters(
+      bounds,
+      Math.round(zoom)
+    ) as ClusterItem[];
+
+    // Sort clusters by reading order for keyboard navigation
+    const withCoords = rawClusters.map((cluster) => ({
+      cluster,
+      lat: cluster.geometry.coordinates[1],
+      lng: cluster.geometry.coordinates[0],
+    }));
+
+    return sortByReadingOrder(withCoords).map((item) => item.cluster);
+  }, [bounds, clusterIndex, zoom]);
 
   return { clusterIndex, clusters };
 }

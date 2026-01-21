@@ -78,6 +78,35 @@
     transform-box: fill-box;
   }
 
+  /* Focus ring for map pins - hidden by default, shown on keyboard focus */
+  .pin-focus-ring {
+    opacity: 0;
+    transition: opacity 0.15s ease-out;
+  }
+
+  .pin-focusable:focus-visible .pin-focus-ring {
+    opacity: 1;
+  }
+
+  /* Focus ring for clusters - hidden by default, shown on keyboard focus */
+  .cluster-focus-ring {
+    opacity: 0;
+    transition: opacity 0.15s ease-out;
+  }
+
+  .cluster-focusable:focus-visible .cluster-focus-ring {
+    opacity: 1;
+  }
+
+  /* Focus ring for space pins - hidden by default, shown on keyboard focus */
+  .space-pin-focus-ring {
+    opacity: 0;
+    transition: opacity 0.15s ease-out;
+  }
+
+  .space-pin-focusable:focus-visible .space-pin-focus-ring {
+    opacity: 1;
+  }
 
   .map-ocean-glow {
     background: radial-gradient(circle at 50% 45%, rgba(30, 58, 95, 0.4), rgba(10, 18, 30, 0));

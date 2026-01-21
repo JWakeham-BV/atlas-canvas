@@ -1,8 +1,9 @@
 import { useLocation } from "@/hooks/use-locations";
+import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { motion } from "@/lib/motion";
 import gsap from "gsap";
 import { MapPin, Radar as RadarIcon, X } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import { OperationModal } from "./OperationModal";
 
 interface InfoDrawerProps {
@@ -10,7 +11,11 @@ interface InfoDrawerProps {
   onClose: () => void;
 }
 
-export function InfoDrawer({ locationId, onClose }: InfoDrawerProps) {
+export interface InfoDrawerHandle {
+  focus: () => void;
+}
+
+export const InfoDrawer = forwardRef<InfoDrawerHandle, InfoDrawerProps>(function InfoDrawer({ locationId, onClose }, ref) {
   const [displayedLocationId, setDisplayedLocationId] = useState<number | null>(
     locationId
   );
@@ -24,6 +29,30 @@ export function InfoDrawer({ locationId, onClose }: InfoDrawerProps) {
   const imageRef = useRef<HTMLImageElement>(null);
   const radarRef = useRef<HTMLDivElement>(null);
   const openButtonRef = useRef<HTMLButtonElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  
+  // Track the element that was focused before the drawer opened (the pin)
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+
+  // Focus trap using the reusable hook - note: we disable restoreFocus since we manage it manually
+  // to ensure focus returns to the specific pin that opened the drawer
+  useFocusTrap({
+    isActive: isOpen,
+    onEscape: onClose,
+    autoFocusDelay: 0, // We handle focus manually via the imperative handle
+    restoreFocus: false, // We restore focus manually to the pin
+    containerRef: panelRef,
+  });
+
+  // Expose focus method to parent (called when a pin is selected)
+  useImperativeHandle(ref, () => ({
+    focus: () => {
+      // Store the currently focused element (the pin) before moving focus
+      previouslyFocusedRef.current = document.activeElement as HTMLElement;
+      // Focus the close button as the first interactive element
+      closeButtonRef.current?.focus();
+    },
+  }));
 
   const handleOpenOperation = useCallback(() => {
     if (panelRef.current) {
@@ -129,6 +158,9 @@ export function InfoDrawer({ locationId, onClose }: InfoDrawerProps) {
           setDisplayedLocationId(null);
           setIsOpen(false);
           isClosingRef.current = false;
+          // Restore focus to the element that opened the drawer (the pin)
+          previouslyFocusedRef.current?.focus();
+          previouslyFocusedRef.current = null;
         });
       });
     }
@@ -167,6 +199,9 @@ export function InfoDrawer({ locationId, onClose }: InfoDrawerProps) {
   return (
     <div
       ref={panelRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label={location ? `Details for ${location.name}` : "Operation Details"}
       className={`fixed inset-4 sm:top-1/2 sm:-translate-y-1/2 z-50 w-[calc(100%-2rem)] max-w-[480px] sm:left-auto sm:right-6 sm:top-24 sm:bottom-auto sm:w-[360px] sm:translate-y-0 ${
         isOpen ? "pointer-events-auto" : "pointer-events-none"
       }`}
@@ -181,6 +216,7 @@ export function InfoDrawer({ locationId, onClose }: InfoDrawerProps) {
             Operation Details
           </div>
           <button
+            ref={closeButtonRef}
             onClick={onClose}
             aria-label="Close info panel"
             className="p-2 rounded-full bg-white/10 hover:bg-accent/20 text-white/80 hover:text-white transition-colors border border-white/10 hover:border-accent/40"
@@ -275,7 +311,7 @@ export function InfoDrawer({ locationId, onClose }: InfoDrawerProps) {
       )}
     </div>
   );
-}
+});
 
 function Radar({ radarRef }: { radarRef: React.RefObject<HTMLDivElement> }) {
   return (

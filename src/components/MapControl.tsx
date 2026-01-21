@@ -127,6 +127,17 @@ export function MapControl({
 
   const showRawPins = livePosition.zoom >= 5.5;
 
+  // Sort locations by reading order (top-to-bottom, left-to-right) for keyboard navigation
+  const sortedLocations = useMemo(() => {
+    return [...locations].sort((a, b) => {
+      // Group by latitude bands (~10 degrees)
+      const latBandA = Math.floor(a.latitude / 10);
+      const latBandB = Math.floor(b.latitude / 10);
+      if (latBandB !== latBandA) return latBandB - latBandA; // Top to bottom
+      return a.longitude - b.longitude; // Left to right within band
+    });
+  }, [locations]);
+
   // Sync livePosition when position changes (from programmatic animations)
   useEffect(() => {
     setLivePosition(position);
@@ -358,6 +369,14 @@ export function MapControl({
     setIsSpaceOverlayOpen(!isSpaceOverlayOpen);
   };
 
+  // Center map on focused element (for keyboard navigation consistency with click behavior)
+  const handlePinFocus = (coordinates: [number, number]) => {
+    animatePosition({
+      coordinates,
+      zoom: positionRef.current.zoom,
+    });
+  };
+
   const regionMenu = (
     <RegionMenu
       regions={regions}
@@ -373,10 +392,16 @@ export function MapControl({
     <ZoomControls onZoomIn={handleZoomIn} onZoomOut={handleZoomOut} />
   );
 
+  // Count visible items for screen reader announcement
+  const visibleItemCount = showRawPins ? sortedLocations.length : clusters.length;
+  const itemType = showRawPins ? "locations" : "location clusters";
+
   return (
     <div
       ref={containerRef}
       className="relative w-full h-full overflow-hidden bg-[#0a121e]"
+      role="application"
+      aria-label={`Interactive world map with ${visibleItemCount} ${itemType}. Use Tab to navigate between locations, Enter to select.`}
     >
       <div className="absolute inset-0 map-ocean-glow pointer-events-none" />
       <div className="absolute inset-0 map-atmosphere pointer-events-none" />
@@ -449,7 +474,7 @@ export function MapControl({
               }
             </Geographies>
             {showRawPins
-              ? locations.map((loc) => (
+              ? sortedLocations.map((loc) => (
                   <Marker
                     key={loc.id}
                     coordinates={[loc.longitude, loc.latitude]}
@@ -464,6 +489,9 @@ export function MapControl({
                             loc.longitude,
                             loc.latitude,
                           ])
+                        }
+                        onFocus={() =>
+                          handlePinFocus([loc.longitude, loc.latitude])
                         }
                       />
                     </g>
@@ -493,6 +521,7 @@ export function MapControl({
                           onClick={() =>
                             handleClusterClick(clusterId, [lng, lat])
                           }
+                          onFocus={() => handlePinFocus([lng, lat])}
                           onKeyDown={(e) => {
                             if (e.key === "Enter" || e.key === " ") {
                               e.preventDefault();
@@ -500,11 +529,21 @@ export function MapControl({
                             }
                           }}
                           role="button"
-                          aria-label={`Cluster of ${count} locations`}
-                          className="cursor-pointer"
+                          tabIndex={0}
+                          aria-label={`Cluster of ${count} locations. Press Enter to zoom in and view individual locations.`}
+                          className="cursor-pointer focus:outline-none cluster-focusable"
                           style={{ pointerEvents: "all" }}
                         >
-                          <title>{`${count} locations - click to zoom`}</title>
+                          <title>{`${count} locations - press Enter to zoom`}</title>
+                          {/* Focus ring - visible only on keyboard focus */}
+                          <circle
+                            r={size + 6}
+                            fill="none"
+                            stroke="rgba(91, 163, 220, 0.9)"
+                            strokeWidth={2}
+                            strokeDasharray="4 2"
+                            className="cluster-focus-ring"
+                          />
                           <circle
                             r={size}
                             fill="rgba(91, 163, 220, 0.25)"
@@ -550,6 +589,9 @@ export function MapControl({
                               loc.longitude,
                               loc.latitude,
                             ])
+                          }
+                          onFocus={() =>
+                            handlePinFocus([loc.longitude, loc.latitude])
                           }
                         />
                       </g>

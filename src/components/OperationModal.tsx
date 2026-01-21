@@ -60,6 +60,36 @@ export function OperationModal({
     [onClose]
   );
 
+  // Focus trap: keep focus within the modal when open
+  const handleTabKey = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.key !== "Tab" || !modalRef.current) return;
+
+      const selector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+      const focusableElements = Array.from(
+        modalRef.current.querySelectorAll<HTMLElement>(selector)
+      ).filter((el) => !el.hasAttribute("disabled") && el.offsetParent !== null);
+
+      if (focusableElements.length === 0) return;
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+
+      if (e.shiftKey) {
+        if (document.activeElement === firstElement) {
+          e.preventDefault();
+          lastElement.focus();
+        }
+      } else {
+        if (document.activeElement === lastElement) {
+          e.preventDefault();
+          firstElement.focus();
+        }
+      }
+    },
+    []
+  );
+
   const handleBackdropClick = useCallback(
     (e: React.MouseEvent) => {
       if (e.target === backdropRef.current) onClose();
@@ -67,13 +97,26 @@ export function OperationModal({
     [onClose]
   );
 
+  // Store previously focused element to restore on close
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
   // Main entrance/exit animation
   useEffect(() => {
     if (isOpen) {
+      // Store the currently focused element
+      previouslyFocusedRef.current = document.activeElement as HTMLElement;
+      
       setIsVisible(true);
       setAnimationComplete(false);
       document.addEventListener("keydown", handleEscape);
+      document.addEventListener("keydown", handleTabKey);
       document.body.style.overflow = "hidden";
+      
+      // Focus the close button after animation starts
+      setTimeout(() => {
+        closeButtonRef.current?.focus();
+      }, 100);
 
       const tl = gsap.timeline({
         onComplete: () => setAnimationComplete(true),
@@ -150,6 +193,7 @@ export function OperationModal({
 
       return () => {
         document.removeEventListener("keydown", handleEscape);
+        document.removeEventListener("keydown", handleTabKey);
       };
     } else if (isVisible) {
       // Exit animation
@@ -160,6 +204,8 @@ export function OperationModal({
           document.body.style.overflow = "";
           // Kill all ScrollTriggers for this modal
           ScrollTrigger.getAll().forEach((st) => st.kill());
+          // Restore focus to previously focused element
+          previouslyFocusedRef.current?.focus();
         },
       });
 
@@ -189,7 +235,7 @@ export function OperationModal({
         0.2
       );
     }
-  }, [isOpen, isVisible, handleEscape, sourceRect]);
+  }, [isOpen, isVisible, handleEscape, handleTabKey, sourceRect]);
 
   // Scroll-triggered animations
   useGSAP(
@@ -455,6 +501,9 @@ export function OperationModal({
     >
       <div
         ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Operation details for ${location.name}`}
         className="relative w-full h-full bg-gradient-to-br from-[#141e2d]/95 via-[#111a28]/95 to-[#0e1621]/95 overflow-hidden"
         style={{ opacity: 0, transform: "translateY(40px)" }}
       >
@@ -480,6 +529,7 @@ export function OperationModal({
             </span>
           </div>
           <button
+            ref={closeButtonRef}
             onClick={onClose}
             aria-label="Close modal"
             className="p-3 rounded-full bg-white/10 hover:bg-accent/20 text-white/80 hover:text-white transition-all duration-300 border border-white/10 hover:border-accent/40 backdrop-blur-sm hover:rotate-90"

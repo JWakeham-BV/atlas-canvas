@@ -2,15 +2,19 @@ interface PinProps {
   category: string;
   isSelected: boolean;
   onClick: () => void;
+  onFocus?: () => void;
   title: string;
 }
 
-export function Pin({ isSelected, onClick, title }: PinProps) {
+export function Pin({ isSelected, onClick, onFocus, title, category }: PinProps) {
   const size = 10;
+  const selectedText = isSelected ? ", currently selected" : "";
+  const ariaLabel = `${title}${selectedText}. Press Enter to view details.`;
   
   return (
     <g
       onClick={onClick}
+      onFocus={onFocus}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
@@ -19,14 +23,24 @@ export function Pin({ isSelected, onClick, title }: PinProps) {
       }}
       role="button"
       tabIndex={0}
-      aria-label={title}
-      className="cursor-pointer"
+      aria-label={ariaLabel}
+      aria-pressed={isSelected}
+      className="cursor-pointer focus:outline-none pin-focusable"
       style={{ pointerEvents: "all" }}
     >
       {/* SVG title element for native tooltip on hover */}
-      <title>{title}</title>
+      <title>{title} ({category})</title>
       {/* Larger invisible hit area for touch devices */}
       <circle r={size * 2.5} fill="transparent" />
+      {/* Focus ring - visible only when focused via keyboard */}
+      <circle
+        r={size + 6}
+        fill="none"
+        stroke="rgba(91, 163, 220, 0.9)"
+        strokeWidth={2}
+        strokeDasharray="4 2"
+        className="pin-focus-ring"
+      />
       {/* Glow effect */}
       <circle
         r={size}

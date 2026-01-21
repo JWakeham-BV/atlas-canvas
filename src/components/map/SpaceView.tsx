@@ -1,4 +1,5 @@
 import { useSpaceOperations } from "@/hooks/use-locations";
+import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { motion } from "@/lib/motion";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
@@ -147,6 +148,9 @@ function SpacePin({ x, y, operation, isSelected, onClick, delay }: SpacePinProps
 
   const colors = categoryColors[operation.category] || categoryColors.reconnaissance;
 
+  const selectedText = isSelected ? ", currently selected" : "";
+  const ariaLabel = `${operation.name}, ${operation.category} satellite at ${operation.altitude}${selectedText}. Press Enter to view details.`;
+
   return (
     <g
       ref={pinRef}
@@ -159,12 +163,25 @@ function SpacePin({ x, y, operation, isSelected, onClick, delay }: SpacePinProps
       }}
       role="button"
       tabIndex={0}
-      aria-label={operation.name}
-      className="cursor-pointer"
+      aria-label={ariaLabel}
+      aria-pressed={isSelected}
+      className="cursor-pointer focus:outline-none space-pin-focusable"
       style={{ pointerEvents: "all" }}
     >
       {/* Hit area */}
       <circle cx={x} cy={y} r={size * 2.5} fill="transparent" />
+      
+      {/* Focus ring - visible only on keyboard focus */}
+      <circle
+        cx={x}
+        cy={y}
+        r={size + 6}
+        fill="none"
+        stroke="rgba(91, 163, 220, 0.9)"
+        strokeWidth={2}
+        strokeDasharray="4 2"
+        className="space-pin-focus-ring"
+      />
       
       {/* Glow */}
       <circle
@@ -233,7 +250,7 @@ export function SpaceOverlay({
   mapHeight,
   isMobile,
 }: SpaceOverlayProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const animationContainerRef = useRef<HTMLDivElement>(null);
   const svgContainerRef = useRef<SVGSVGElement>(null);
   const ringsRef = useRef<SVGGElement>(null);
   const spaceOperations = useSpaceOperations();
@@ -242,6 +259,14 @@ export function SpaceOverlay({
   const [shouldRender, setShouldRender] = useState(false);
   const isAnimatingRef = useRef(false);
   const hasAnimatedIn = useRef(false);
+  
+  // Focus trap using the reusable hook
+  const focusTrapRef = useFocusTrap<HTMLDivElement>({
+    isActive: isActive && shouldRender,
+    onEscape: onClose,
+    autoFocusDelay: 300,
+    restoreFocus: true,
+  });
 
   // Desktop: center in middle of viewport for full circles
   const centerX = mapWidth / 2;
@@ -306,23 +331,9 @@ export function SpaceOverlay({
     }));
   }, [mapWidth, mapHeight]);
 
-  // Handle escape key to close
-  useEffect(() => {
-    if (!isActive) return;
-    
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isActive, onClose]);
-
   // Handle enter animation
   const animateIn = useCallback(() => {
-    if (!containerRef.current || isAnimatingRef.current || hasAnimatedIn.current) return;
+    if (!animationContainerRef.current || isAnimatingRef.current || hasAnimatedIn.current) return;
     
     isAnimatingRef.current = true;
     hasAnimatedIn.current = true;
@@ -335,7 +346,7 @@ export function SpaceOverlay({
     
     // Fade in container
     tl.fromTo(
-      containerRef.current,
+      animationContainerRef.current,
       { opacity: 0 },
       { opacity: 1, duration: motion.duration.base, ease: motion.ease.out },
       0
@@ -354,7 +365,7 @@ export function SpaceOverlay({
 
   // Handle exit animation
   const animateOut = useCallback(() => {
-    if (!containerRef.current || isAnimatingRef.current) return;
+    if (!animationContainerRef.current || isAnimatingRef.current) return;
     
     isAnimatingRef.current = true;
     
@@ -363,6 +374,7 @@ export function SpaceOverlay({
         setShouldRender(false);
         isAnimatingRef.current = false;
         hasAnimatedIn.current = false;
+        // Focus restoration is handled by useFocusTrap
       },
     });
     
@@ -377,7 +389,7 @@ export function SpaceOverlay({
     
     // Fade out container
     tl.to(
-      containerRef.current,
+      animationContainerRef.current,
       { opacity: 0, duration: motion.duration.base, ease: motion.ease.in },
       0.05
     );
@@ -409,33 +421,49 @@ export function SpaceOverlay({
   if (isMobile) {
     return (
       <div 
-        ref={containerRef}
-        className="absolute inset-0 z-20 flex flex-col"
+        ref={focusTrapRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Space operations overlay with ${spaceOperations.length} satellites`}
+        className="absolute inset-0 z-20"
         style={{ pointerEvents: "none" }}
       >
-        {/* Dark overlay backdrop */}
-        <div 
-          className="absolute inset-0 bg-[#050a12]/85"
-          style={{ pointerEvents: "all" }}
-          onClick={onClose}
+        {/* Trigger button inside focus trap */}
+        <SpaceTriggerButton
+          isActive={true}
+          onToggle={onClose}
+          operationCount={spaceOperations.length}
         />
         
-        {/* Scrollable list */}
         <div 
-          className="relative flex-1 overflow-y-auto pt-16 pb-24 px-4"
-          style={{ pointerEvents: "all" }}
-          onClick={(e) => e.stopPropagation()}
+          ref={animationContainerRef}
+          className="absolute inset-0 flex flex-col"
+          style={{ pointerEvents: "none" }}
         >
-          <div className="space-y-3">
-            {spaceOperations.map((op, index) => (
-              <MobileSpaceCard
-                key={op.id}
-                operation={op}
-                isSelected={selectedOperationId === op.id}
-                onClick={() => onOperationSelect(op.id)}
-                delay={0.05 + index * 0.03}
-              />
-            ))}
+          {/* Dark overlay backdrop */}
+          <div 
+            className="absolute inset-0 bg-[#050a12]/85"
+            style={{ pointerEvents: "all" }}
+            onClick={onClose}
+          />
+          
+          {/* Scrollable list */}
+          <div 
+            className="relative flex-1 overflow-y-auto pt-16 pb-24 px-4"
+            style={{ pointerEvents: "all" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="space-y-3">
+              {spaceOperations.map((op, index) => (
+                <MobileSpaceCard
+                  key={op.id}
+                  operation={op}
+                  isSelected={selectedOperationId === op.id}
+                  onClick={() => onOperationSelect(op.id)}
+                  delay={0.05 + index * 0.03}
+                />
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -445,16 +473,27 @@ export function SpaceOverlay({
   // Desktop: Orbital rings view
   return (
     <div 
-      ref={containerRef}
+      ref={focusTrapRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Space operations orbital view with ${spaceOperations.length} satellites. Press Escape to close.`}
       className="absolute inset-0 z-20"
       style={{ pointerEvents: "none" }}
     >
-      <svg 
-        ref={svgContainerRef}
-        width={mapWidth} 
-        height={mapHeight} 
-        className="absolute inset-0"
-      >
+      {/* Trigger button inside focus trap */}
+      <SpaceTriggerButton
+        isActive={true}
+        onToggle={onClose}
+        operationCount={spaceOperations.length}
+      />
+      
+      <div ref={animationContainerRef} className="absolute inset-0" style={{ pointerEvents: "none" }}>
+        <svg 
+          ref={svgContainerRef}
+          width={mapWidth} 
+          height={mapHeight} 
+          className="absolute inset-0"
+        >
         {/* Dark overlay to dim the map */}
         <rect
           x={0}
@@ -521,7 +560,8 @@ export function SpaceOverlay({
             />
           ))}
         </g>
-      </svg>
+        </svg>
+      </div>
     </div>
   );
 }
@@ -631,19 +671,16 @@ function MobileSpaceCard({ operation, isSelected, onClick, delay }: MobileSpaceC
   );
 }
 
-// Trigger component - the pull-down strip at the top
-interface SpaceTriggerProps {
+// Trigger button component - the pull-down strip at the top
+interface SpaceTriggerButtonProps {
   isActive: boolean;
   onToggle: () => void;
   operationCount: number;
 }
 
-export function SpaceTrigger({ isActive, onToggle, operationCount }: SpaceTriggerProps) {
-  const triggerRef = useRef<HTMLButtonElement>(null);
-
+function SpaceTriggerButton({ isActive, onToggle, operationCount }: SpaceTriggerButtonProps) {
   return (
     <button
-      ref={triggerRef}
       onClick={onToggle}
       className={`
         absolute top-0 left-1/2 -translate-x-1/2 z-40
@@ -709,5 +746,29 @@ export function SpaceTrigger({ isActive, onToggle, operationCount }: SpaceTrigge
         <polyline points="6 9 12 15 18 9" />
       </svg>
     </button>
+  );
+}
+
+// Combined SpaceTrigger that includes the button and wraps the overlay with focus trap
+interface SpaceTriggerProps {
+  isActive: boolean;
+  onToggle: () => void;
+  operationCount: number;
+}
+
+export function SpaceTrigger({ isActive, onToggle, operationCount }: SpaceTriggerProps) {
+  // When NOT active, just render the button
+  // When active, the button will be rendered inside the SpaceOverlay's focus trap container
+  if (isActive) {
+    // Don't render - the button will be inside SpaceOverlay
+    return null;
+  }
+  
+  return (
+    <SpaceTriggerButton
+      isActive={isActive}
+      onToggle={onToggle}
+      operationCount={operationCount}
+    />
   );
 }

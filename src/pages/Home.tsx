@@ -1,9 +1,9 @@
-import { InfoDrawer } from "@/components/InfoDrawer";
-import { SpaceInfoDrawer } from "@/components/SpaceInfoDrawer";
+import { InfoDrawer, type InfoDrawerHandle } from "@/components/InfoDrawer";
+import { SpaceInfoDrawer, type SpaceInfoDrawerHandle } from "@/components/SpaceInfoDrawer";
 import { MapControl } from "@/components/MapControl";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 gsap.registerPlugin(useGSAP);
 
@@ -16,6 +16,28 @@ export default function Home() {
   );
   const [resetViewToken, setResetViewToken] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const infoDrawerRef = useRef<InfoDrawerHandle>(null);
+  const spaceInfoDrawerRef = useRef<SpaceInfoDrawerHandle>(null);
+
+  // Focus the appropriate drawer when a selection is made
+  const handleLocationSelect = useCallback((id: number | null) => {
+    setSelectedLocationId(id);
+    if (id !== null) {
+      // Small delay to allow drawer to animate in
+      setTimeout(() => {
+        infoDrawerRef.current?.focus();
+      }, 400);
+    }
+  }, []);
+
+  const handleSpaceOperationSelect = useCallback((id: number | null) => {
+    setSelectedSpaceOperationId(id);
+    if (id !== null) {
+      setTimeout(() => {
+        spaceInfoDrawerRef.current?.focus();
+      }, 400);
+    }
+  }, []);
 
   useGSAP(
     () => {
@@ -54,9 +76,9 @@ export default function Home() {
       {/* Map Area */}
       <div className="flex-1 relative z-0">
         <MapControl
-          onLocationSelect={setSelectedLocationId}
+          onLocationSelect={handleLocationSelect}
           selectedLocationId={selectedLocationId}
-          onSpaceOperationSelect={setSelectedSpaceOperationId}
+          onSpaceOperationSelect={handleSpaceOperationSelect}
           selectedSpaceOperationId={selectedSpaceOperationId}
           resetViewToken={resetViewToken}
         />
@@ -64,6 +86,7 @@ export default function Home() {
 
       {/* Info Drawer - For ground operations */}
       <InfoDrawer
+        ref={infoDrawerRef}
         locationId={selectedLocationId}
         onClose={() => {
           setSelectedLocationId(null);
@@ -72,6 +95,7 @@ export default function Home() {
 
       {/* Space Info Drawer - For space operations */}
       <SpaceInfoDrawer
+        ref={spaceInfoDrawerRef}
         operationId={selectedSpaceOperationId}
         onClose={() => {
           setSelectedSpaceOperationId(null);
