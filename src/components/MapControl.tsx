@@ -15,6 +15,7 @@ import {
 } from "react-simple-maps";
 import { Pin } from "./Pin";
 import { RegionMenu } from "./map/RegionMenu";
+import { CategoryFilter } from "./map/CategoryFilter";
 import { SearchBar, type SearchBarHandle } from "./map/SearchBar";
 import { SpaceOverlay, SpaceTrigger } from "./map/SpaceView";
 import { ZoomControls } from "./map/ZoomControls";
@@ -107,21 +108,42 @@ export function MapControl({
   const expectedSearchRef = useRef<string | null>(null);
   const searchBarRef = useRef<SearchBarHandle>(null);
   
-  // Parse search query from URL
+  // Get unique categories from locations (needed early for URL parsing)
+  const categories = useMemo(() => {
+    const uniqueCategories = new Set(locations.map((loc) => loc.category));
+    return Array.from(uniqueCategories).sort();
+  }, [locations]);
+  
+  // Parse search query and category from URL
   const getSearchFromUrl = () => {
     const params = new URLSearchParams(window.location.search);
     return params.get("search") || "";
   };
 
-  const [searchQuery, setSearchQuery] = useState(() => getSearchFromUrl());
+  const getCategoryFromUrl = () => {
+    const params = new URLSearchParams(window.location.search);
+    const category = params.get("category");
+    return category && categories.includes(category) ? category : null;
+  };
 
-  // Update URL when search query changes
+  const [searchQuery, setSearchQuery] = useState(() => getSearchFromUrl());
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(() => {
+    // Initialize from URL after categories are available
+    const params = new URLSearchParams(window.location.search);
+    const category = params.get("category");
+    const uniqueCategories = new Set(locations.map((loc) => loc.category));
+    const validCategories = Array.from(uniqueCategories);
+    return category && validCategories.includes(category) ? category : null;
+  });
+
+  // Update URL when search query or category changes
   useEffect(() => {
     const newSearchValue = searchQuery.trim();
     const currentUrlSearch = getSearchFromUrl();
+    const currentUrlCategory = getCategoryFromUrl();
 
-    // Only update if the search value actually differs from URL
-    if (currentUrlSearch === newSearchValue) {
+    // Only update if values actually differ from URL
+    if (currentUrlSearch === newSearchValue && currentUrlCategory === selectedCategory) {
       expectedSearchRef.current = null;
       return;
     }
@@ -135,18 +157,30 @@ export function MapControl({
     } else {
       url.searchParams.delete("search");
     }
+    
+    if (selectedCategory) {
+      url.searchParams.set("category", selectedCategory);
+    } else {
+      url.searchParams.delete("category");
+    }
+    
     const newUrl = url.pathname + (url.search ? url.search : "");
     setLocation(newUrl, { replace: true });
-  }, [searchQuery, setLocation]);
+  }, [searchQuery, selectedCategory, setLocation, categories]);
 
-  // Sync search query when URL changes externally (e.g., browser back/forward)
+  // Sync search query and category when URL changes externally (e.g., browser back/forward)
   // Only sync if the URL change wasn't expected (i.e., we didn't cause it)
   useEffect(() => {
     const urlSearch = getSearchFromUrl();
+    const urlCategory = getCategoryFromUrl();
     
     // If this is the search value we just set, ignore it
     if (expectedSearchRef.current !== null && urlSearch === expectedSearchRef.current) {
       expectedSearchRef.current = null;
+      // Still sync category if it changed
+      if (urlCategory !== selectedCategory) {
+        setSelectedCategory(urlCategory);
+      }
       return;
     }
 
@@ -155,20 +189,34 @@ export function MapControl({
       expectedSearchRef.current = null;
       setSearchQuery(urlSearch);
     }
-  }, [location, searchQuery]);
-
-  // Filter locations based on search query
-  const filteredLocations = useMemo(() => {
-    if (!searchQuery.trim()) return locations;
     
-    const query = searchQuery.toLowerCase().trim();
-    return locations.filter((loc) => {
-      const nameMatch = loc.name.toLowerCase().includes(query);
-      const descMatch = loc.description.toLowerCase().includes(query);
-      const categoryMatch = loc.category.toLowerCase().includes(query);
-      return nameMatch || descMatch || categoryMatch;
-    });
-  }, [locations, searchQuery]);
+    if (urlCategory !== selectedCategory) {
+      setSelectedCategory(urlCategory);
+    }
+  }, [location, searchQuery, selectedCategory]);
+
+  // Filter locations based on search query and category
+  const filteredLocations = useMemo(() => {
+    let filtered = locations;
+
+    // Apply category filter
+    if (selectedCategory) {
+      filtered = filtered.filter((loc) => loc.category === selectedCategory);
+    }
+
+    // Apply search query filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter((loc) => {
+        const nameMatch = loc.name.toLowerCase().includes(query);
+        const descMatch = loc.description.toLowerCase().includes(query);
+        const categoryMatch = loc.category.toLowerCase().includes(query);
+        return nameMatch || descMatch || categoryMatch;
+      });
+    }
+
+    return filtered;
+  }, [locations, searchQuery, selectedCategory]);
 
   const bounds = useMemo(
     () =>
@@ -246,10 +294,10 @@ export function MapControl({
 
   const spaceOperations = useSpaceOperations();
 
-  // Calculate bounds for filtered locations and zoom to fit when search changes
+  // Calculate bounds for filtered locations and zoom to fit when search or filter changes
   useEffect(() => {
-    // If search is cleared, reset to default view
-    if (!searchQuery.trim()) {
+    // If search and filter are both cleared, reset to default view
+    if (!searchQuery.trim() && !selectedCategory) {
       resetPosition();
       return;
     }
@@ -295,7 +343,7 @@ export function MapControl({
       coordinates: [centerLng, centerLat],
       zoom: targetZoom,
     });
-  }, [searchQuery, filteredLocations, mapWidth, mapHeight, minZoom, animatePosition, resetPosition]);
+  }, [searchQuery, selectedCategory, filteredLocations, mapWidth, mapHeight, minZoom, animatePosition, resetPosition]);
 
   const regions = useMemo<Region[]>(
     () => [
@@ -766,14 +814,24 @@ export function MapControl({
 
       {/* Search Bar - positioned below Space Ops button */}
       {!isSpaceOverlayOpen && (
-        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 w-[90%] max-w-md sm:max-w-lg">
-          <SearchBar
-            ref={searchBarRef}
-            value={searchQuery}
-            onChange={setSearchQuery}
-            resultsCount={searchQuery.trim() ? filteredLocations.length : undefined}
-          />
-        </div>
+        <>
+          <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 w-[90%] max-w-md sm:max-w-lg">
+            <SearchBar
+              ref={searchBarRef}
+              value={searchQuery}
+              onChange={setSearchQuery}
+              resultsCount={(searchQuery.trim() || selectedCategory) ? filteredLocations.length : undefined}
+            />
+          </div>
+          {/* Category Filter - positioned below search bar, always visible */}
+          <div className="absolute top-24 left-1/2 -translate-x-1/2 z-30 w-[90%] max-w-md sm:max-w-lg">
+            <CategoryFilter
+              categories={categories}
+              selectedCategory={selectedCategory}
+              onSelectCategory={setSelectedCategory}
+            />
+          </div>
+        </>
       )}
 
       {hoveredRegion && !isSpaceOverlayOpen ? (
