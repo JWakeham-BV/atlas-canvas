@@ -2,6 +2,7 @@ import { useLocations, useSpaceOperations } from "@/hooks/use-locations";
 import { motion } from "@/lib/motion";
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
+import { useLocation } from "wouter";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -14,6 +15,7 @@ import {
 } from "react-simple-maps";
 import { Pin } from "./Pin";
 import { RegionMenu } from "./map/RegionMenu";
+import { SearchBar, type SearchBarHandle } from "./map/SearchBar";
 import { SpaceOverlay, SpaceTrigger } from "./map/SpaceView";
 import { ZoomControls } from "./map/ZoomControls";
 import { getMercatorBounds } from "./map/geo";
@@ -93,6 +95,80 @@ export function MapControl({
   // Live position tracks the current view during user interaction (for clustering/sizing)
   // This is separate from `position` which is the controlled state for ZoomableGroup
   const [livePosition, setLivePosition] = useState(position);
+  const [activeRegionId, setActiveRegionId] = useState<string>("world");
+  const [isRegionsOpen, setIsRegionsOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  const [hoveredRegion, setHoveredRegion] = useState<string | null>(null);
+  const [pendingSelectionId, setPendingSelectionId] = useState<number | null>(
+    null
+  );
+  const [isSpaceOverlayOpen, setIsSpaceOverlayOpen] = useState(false);
+  const [location, setLocation] = useLocation();
+  const expectedSearchRef = useRef<string | null>(null);
+  const searchBarRef = useRef<SearchBarHandle>(null);
+  
+  // Parse search query from URL
+  const getSearchFromUrl = () => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("search") || "";
+  };
+
+  const [searchQuery, setSearchQuery] = useState(() => getSearchFromUrl());
+
+  // Update URL when search query changes
+  useEffect(() => {
+    const newSearchValue = searchQuery.trim();
+    const currentUrlSearch = getSearchFromUrl();
+
+    // Only update if the search value actually differs from URL
+    if (currentUrlSearch === newSearchValue) {
+      expectedSearchRef.current = null;
+      return;
+    }
+
+    // Mark what we expect the URL to be
+    expectedSearchRef.current = newSearchValue;
+    
+    const url = new URL(window.location.href);
+    if (newSearchValue) {
+      url.searchParams.set("search", newSearchValue);
+    } else {
+      url.searchParams.delete("search");
+    }
+    const newUrl = url.pathname + (url.search ? url.search : "");
+    setLocation(newUrl, { replace: true });
+  }, [searchQuery, setLocation]);
+
+  // Sync search query when URL changes externally (e.g., browser back/forward)
+  // Only sync if the URL change wasn't expected (i.e., we didn't cause it)
+  useEffect(() => {
+    const urlSearch = getSearchFromUrl();
+    
+    // If this is the search value we just set, ignore it
+    if (expectedSearchRef.current !== null && urlSearch === expectedSearchRef.current) {
+      expectedSearchRef.current = null;
+      return;
+    }
+
+    // If URL changed to something unexpected, sync it
+    if (urlSearch !== searchQuery) {
+      expectedSearchRef.current = null;
+      setSearchQuery(urlSearch);
+    }
+  }, [location, searchQuery]);
+
+  // Filter locations based on search query
+  const filteredLocations = useMemo(() => {
+    if (!searchQuery.trim()) return locations;
+    
+    const query = searchQuery.toLowerCase().trim();
+    return locations.filter((loc) => {
+      const nameMatch = loc.name.toLowerCase().includes(query);
+      const descMatch = loc.description.toLowerCase().includes(query);
+      const categoryMatch = loc.category.toLowerCase().includes(query);
+      return nameMatch || descMatch || categoryMatch;
+    });
+  }, [locations, searchQuery]);
 
   const bounds = useMemo(
     () =>
@@ -120,7 +196,7 @@ export function MapControl({
   }, [bounds]);
 
   const { clusterIndex, clusters } = useClusters(
-    locations,
+    filteredLocations,
     livePosition.zoom,
     normalizedBounds
   );
@@ -129,29 +205,97 @@ export function MapControl({
 
   // Sort locations by reading order (top-to-bottom, left-to-right) for keyboard navigation
   const sortedLocations = useMemo(() => {
-    return [...locations].sort((a, b) => {
+    return [...filteredLocations].sort((a, b) => {
       // Group by latitude bands (~10 degrees)
       const latBandA = Math.floor(a.latitude / 10);
       const latBandB = Math.floor(b.latitude / 10);
       if (latBandB !== latBandA) return latBandB - latBandA; // Top to bottom
       return a.longitude - b.longitude; // Left to right within band
     });
-  }, [locations]);
+  }, [filteredLocations]);
 
   // Sync livePosition when position changes (from programmatic animations)
   useEffect(() => {
     setLivePosition(position);
   }, [position]);
-  const [activeRegionId, setActiveRegionId] = useState<string>("world");
-  const [isRegionsOpen, setIsRegionsOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
-  const [hoveredRegion, setHoveredRegion] = useState<string | null>(null);
-  const [pendingSelectionId, setPendingSelectionId] = useState<number | null>(
-    null
-  );
 
-  const [isSpaceOverlayOpen, setIsSpaceOverlayOpen] = useState(false);
+  // Global keyboard shortcut: Cmd/Ctrl + K to focus search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input/textarea
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target instanceof HTMLElement && e.target.isContentEditable)
+      ) {
+        return;
+      }
+
+      // Cmd/Ctrl + K to focus search
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        if (!isSpaceOverlayOpen) {
+          searchBarRef.current?.focus();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isSpaceOverlayOpen]);
+
   const spaceOperations = useSpaceOperations();
+
+  // Calculate bounds for filtered locations and zoom to fit when search changes
+  useEffect(() => {
+    // If search is cleared, reset to default view
+    if (!searchQuery.trim()) {
+      resetPosition();
+      return;
+    }
+
+    if (filteredLocations.length === 0) return;
+
+    // Calculate bounding box for filtered locations
+    const lngs = filteredLocations.map((loc) => loc.longitude);
+    const lats = filteredLocations.map((loc) => loc.latitude);
+    
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+
+    // Add padding (10% on each side)
+    const lngPadding = (maxLng - minLng) * 0.1;
+    const latPadding = (maxLat - minLat) * 0.1;
+
+    const paddedMinLng = minLng - lngPadding;
+    const paddedMaxLng = maxLng + lngPadding;
+    const paddedMinLat = Math.max(-85, minLat - latPadding);
+    const paddedMaxLat = Math.min(85, maxLat + latPadding);
+
+    // Calculate center
+    const centerLng = (paddedMinLng + paddedMaxLng) / 2;
+    const centerLat = (paddedMinLat + paddedMaxLat) / 2;
+
+    // Calculate required zoom level to fit the bounds
+    const lngRange = paddedMaxLng - paddedMinLng;
+    const latRange = paddedMaxLat - paddedMinLat;
+    
+    // Estimate zoom based on the larger dimension
+    const lngZoom = (360 / lngRange) * (mapWidth / 800);
+    const latZoom = (170 / latRange) * (mapHeight / 450);
+    const estimatedZoom = Math.min(lngZoom, latZoom, 6); // Cap at zoom 6
+    
+    // Use a reasonable zoom level
+    const targetZoom = Math.max(minZoom, Math.min(estimatedZoom, 4));
+
+    // Animate to the new position
+    animatePosition({
+      coordinates: [centerLng, centerLat],
+      zoom: targetZoom,
+    });
+  }, [searchQuery, filteredLocations, mapWidth, mapHeight, minZoom, animatePosition, resetPosition]);
 
   const regions = useMemo<Region[]>(
     () => [
@@ -619,6 +763,18 @@ export function MapControl({
         onToggle={handleToggleSpaceOverlay}
         operationCount={spaceOperations.length}
       />
+
+      {/* Search Bar - positioned below Space Ops button */}
+      {!isSpaceOverlayOpen && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-30 w-[90%] max-w-md sm:max-w-lg">
+          <SearchBar
+            ref={searchBarRef}
+            value={searchQuery}
+            onChange={setSearchQuery}
+            resultsCount={searchQuery.trim() ? filteredLocations.length : undefined}
+          />
+        </div>
+      )}
 
       {hoveredRegion && !isSpaceOverlayOpen ? (
         <div className="absolute top-6 left-6 z-30 hidden sm:block pointer-events-none">
